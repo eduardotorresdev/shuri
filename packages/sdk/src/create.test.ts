@@ -32,30 +32,23 @@ describe("create", () => {
   it("wires collections and adapter into a working store", async () => {
     const app = createApp();
 
-    const post = await app.posts.insert({ title: "Hello", status: "draft" });
+    const post = await app.collections.posts.insert({ title: "Hello", status: "draft" });
 
     expect(post).toMatchObject({ title: "Hello", status: "draft" });
-    expect(await app.posts.findOne(post.id)).toEqual(post);
+    expect(await app.collections.posts.findOne(post.id)).toEqual(post);
     expect(app.core.getCollection("posts")).toBe(collections[0]);
   });
 
-  it("exposes the same collection through app.<slug> and app.store.collection()", () => {
+  it("exposes the same collection through app.collections.<slug> and app.store.collection()", () => {
     const app = createApp();
-    expect(app.posts).toBe(app.store.collection("posts"));
-  });
-
-  it("rejects a collection slug that collides with a facade property", () => {
-    const reserved = [{ ...collections[0], slug: "store" }] as const;
-    expect(() => create({ collections: reserved, adapter: createMemoryAdapter() })).toThrow(
-      'Collection slug "store" is reserved',
-    );
+    expect(app.collections.posts).toBe(app.store.collection("posts"));
   });
 
   it("infers the record shape from each collection's fields (compile-time)", async () => {
     const app = createApp();
 
     // Required fields must be present, optional fields may be omitted, values must match the field type.
-    const inserted = await app.posts.insert({ title: "Hello", status: "draft" });
+    const inserted = await app.collections.posts.insert({ title: "Hello", status: "draft" });
     const title: string = inserted.title;
     const status: "draft" | "published" = inserted.status;
     const views: number | undefined = inserted.views;
@@ -63,12 +56,12 @@ describe("create", () => {
     expect({ title, status, views, id }).toMatchObject({ title: "Hello", status: "draft" });
 
     // @ts-expect-error "status" is required
-    app.posts.insert({ title: "Hello" });
+    app.collections.posts.insert({ title: "Hello" });
     // @ts-expect-error "status" only accepts declared option values
-    app.posts.insert({ title: "Hello", status: "archived" });
+    app.collections.posts.insert({ title: "Hello", status: "archived" });
     // @ts-expect-error "views" is a number field
-    app.posts.insert({ title: "Hello", status: "draft", views: "many" });
+    app.collections.posts.insert({ title: "Hello", status: "draft", views: "many" });
     // @ts-expect-error unknown field
-    app.posts.insert({ title: "Hello", status: "draft", unknownField: true });
+    app.collections.posts.insert({ title: "Hello", status: "draft", unknownField: true });
   });
 });
