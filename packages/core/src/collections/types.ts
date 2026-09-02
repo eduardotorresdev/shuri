@@ -8,5 +8,5 @@ export interface CollectionSchema {
   plural: string;
   /** Whether records in this collection can be manually reordered in a list. */
   orderable?: boolean;
-  fields: Field[];
+  fields: readonly Field[];
 }

@@ -28,7 +28,7 @@ export interface SelectOption {
 
 export interface SelectField extends FieldBase {
   type: "select";
-  options: SelectOption[];
+  options: readonly SelectOption[];
   multiple?: boolean;
 }
 

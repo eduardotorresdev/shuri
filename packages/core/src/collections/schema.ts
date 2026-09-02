@@ -32,7 +32,7 @@ const selectFieldValidator: Validator<SelectField> = object<SelectField>({
       (option) => option.value,
       (value) => `duplicate option value "${value}"`,
     ),
-  ),
+  ) as Validator<readonly SelectOption[]>,
 });
 
 function relationFieldValidator(slugs: Set<string>): Validator<Extract<Field, { type: "relation" }>> {
@@ -68,14 +68,14 @@ function fieldValidator(slugs: Set<string>): Validator<Field> {
   );
 }
 
-function fieldsValidator(slugs: Set<string>): Validator<Field[]> {
+function fieldsValidator(slugs: Set<string>): Validator<readonly Field[]> {
   return all(
     nonEmpty("must declare at least one field"),
     keyedArray((field) => field.name || "(missing name)", fieldValidator(slugs), {
       dedupeKey: (field) => field.name || undefined,
       duplicateMessage: (name) => `duplicate field name "${name}"`,
     }),
-  );
+  ) as Validator<readonly Field[]>;
 }
 
 function collectionValidator(slugs: Set<string>): Validator<CollectionSchema> {
