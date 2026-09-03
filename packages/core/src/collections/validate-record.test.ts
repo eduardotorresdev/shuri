@@ -41,7 +41,11 @@ describe("validateRecord", () => {
 
   it("requires a required field", () => {
     const issues = validateRecord(services, {});
-    expect(issues).toEqual(expect.arrayContaining([expect.objectContaining({ message: '"name" is required' })]));
+    expect(issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ message: '"name" is required' }),
+      ]),
+    );
   });
 
   it("does not require optional fields", () => {
@@ -50,23 +54,40 @@ describe("validateRecord", () => {
 
   it("enforces text minLength/maxLength", () => {
     expect(validateRecord(services, { name: "H" })).toEqual(
-      expect.arrayContaining([expect.objectContaining({ message: '"name" must be at least 2 characters' })]),
+      expect.arrayContaining([
+        expect.objectContaining({
+          message: '"name" must be at least 2 characters',
+        }),
+      ]),
     );
     expect(validateRecord(services, { name: "H".repeat(21) })).toEqual(
-      expect.arrayContaining([expect.objectContaining({ message: '"name" must be at most 20 characters' })]),
+      expect.arrayContaining([
+        expect.objectContaining({
+          message: '"name" must be at most 20 characters',
+        }),
+      ]),
     );
   });
 
   it("rejects a malformed email", () => {
-    const issues = validateRecord(services, { name: "Haircut", contact: "not-an-email" });
+    const issues = validateRecord(services, {
+      name: "Haircut",
+      contact: "not-an-email",
+    });
     expect(issues).toEqual(
-      expect.arrayContaining([expect.objectContaining({ message: '"contact" must be a valid email' })]),
+      expect.arrayContaining([
+        expect.objectContaining({ message: '"contact" must be a valid email' }),
+      ]),
     );
   });
 
   it("rejects a negative price when sign is positive", () => {
     const issues = validateRecord(services, { name: "Haircut", price: -10 });
-    expect(issues).toEqual(expect.arrayContaining([expect.objectContaining({ message: '"price" must be positive' })]));
+    expect(issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ message: '"price" must be positive' }),
+      ]),
+    );
   });
 
   it("rejects a non-integer value for an integer number field", () => {
@@ -76,36 +97,56 @@ describe("validateRecord", () => {
     };
     const issues = validateRecord(integerField, { quantity: 1.5 });
     expect(issues).toEqual(
-      expect.arrayContaining([expect.objectContaining({ message: '"quantity" must be an integer' })]),
+      expect.arrayContaining([
+        expect.objectContaining({ message: '"quantity" must be an integer' }),
+      ]),
     );
   });
 
   it("rejects a value outside a select field's options", () => {
-    const issues = validateRecord(services, { name: "Haircut", category: "unknown" });
+    const issues = validateRecord(services, {
+      name: "Haircut",
+      category: "unknown",
+    });
     expect(issues).toEqual(
-      expect.arrayContaining([expect.objectContaining({ message: '"category" is not a valid option' })]),
+      expect.arrayContaining([
+        expect.objectContaining({
+          message: '"category" is not a valid option',
+        }),
+      ]),
     );
   });
 
   it("rejects a non-boolean value for a boolean field", () => {
     const issues = validateRecord(services, { name: "Haircut", active: "yes" });
-    expect(issues).toEqual(expect.arrayContaining([expect.objectContaining({ message: '"active" must be a boolean' })]));
+    expect(issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ message: '"active" must be a boolean' }),
+      ]),
+    );
   });
 
   it("requires a single relation value to be a string id", () => {
     const issues = validateRecord(services, { name: "Haircut", provider: 123 });
     expect(issues).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ message: '"provider" must reference record id(s) as string' }),
+        expect.objectContaining({
+          message: '"provider" must reference record id(s) as string',
+        }),
       ]),
     );
   });
 
   it("requires a multiple relation value to be an array of string ids", () => {
-    const issues = validateRecord(services, { name: "Haircut", addons: "addon-1" });
+    const issues = validateRecord(services, {
+      name: "Haircut",
+      addons: "addon-1",
+    });
     expect(issues).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ message: '"addons" must reference record id(s) as strings' }),
+        expect.objectContaining({
+          message: '"addons" must reference record id(s) as strings',
+        }),
       ]),
     );
   });
@@ -116,6 +157,34 @@ describe("validateRecord", () => {
 
   it("still validates provided fields in partial mode", () => {
     const issues = validateRecord(services, { price: -50 }, { partial: true });
-    expect(issues).toEqual(expect.arrayContaining([expect.objectContaining({ message: '"price" must be positive' })]));
+    expect(issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ message: '"price" must be positive' }),
+      ]),
+    );
+  });
+
+  it("rejects a payload with an injected id", () => {
+    const issues = validateRecord(services, { name: "Haircut", id: "hacked" });
+    expect(issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          message:
+            '"id" is generated automatically and must not be included in the payload',
+        }),
+      ]),
+    );
+  });
+
+  it("rejects an injected id in partial mode too", () => {
+    const issues = validateRecord(services, { id: "hacked" }, { partial: true });
+    expect(issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          message:
+            '"id" is generated automatically and must not be included in the payload',
+        }),
+      ]),
+    );
   });
 });

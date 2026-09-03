@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { GlobalSchemaError } from "../../globals/errors.js";
+import type { GlobalSchema } from "../../globals/types.js";
 import { createCore } from "../define.js";
 import { CollectionSchemaError } from "../errors.js";
 import type { CollectionSchema } from "../types.js";
@@ -30,7 +32,14 @@ const services: CollectionSchema = {
       ],
     },
     { type: "number", name: "price", kind: "float", sign: "positive", min: 0 },
-    { type: "number", name: "capacity", kind: "integer", sign: "positive", min: 1, max: 100 },
+    {
+      type: "number",
+      name: "capacity",
+      kind: "integer",
+      sign: "positive",
+      min: 1,
+      max: 100,
+    },
     { type: "boolean", name: "featured" },
     { type: "relation", name: "category", collection: "categories" },
   ],
@@ -59,7 +68,10 @@ describe("createCore with a realistic collections schema", () => {
       .getCollection("services")
       ?.fields.find((field) => field.type === "relation");
 
-    expect(relationField).toMatchObject({ type: "relation", collection: "categories" });
+    expect(relationField).toMatchObject({
+      type: "relation",
+      collection: "categories",
+    });
     expect(core.getCollection((relationField as { collection: string }).collection)).toBe(
       categories,
     );
@@ -73,9 +85,76 @@ describe("createCore with a realistic collections schema", () => {
   it("rejects the whole schema when a relation points to a missing collection", () => {
     const brokenServices: CollectionSchema = {
       ...services,
-      fields: [...services.fields, { type: "relation", name: "author", collection: "authors" }],
+      fields: [
+        ...services.fields,
+        { type: "relation", name: "author", collection: "authors" },
+      ],
     };
 
-    expect(() => createCore({ collections: [brokenServices] })).toThrow(CollectionSchemaError);
+    expect(() => createCore({ collections: [brokenServices] })).toThrow(
+      CollectionSchemaError,
+    );
+  });
+});
+
+const siteSettings: GlobalSchema = {
+  slug: "site",
+  title: "Site settings",
+  category: { title: "Geral" },
+  fields: [{ type: "text", name: "name", required: true }],
+};
+
+describe("createCore with globals", () => {
+  it("builds a core exposing every declared global", () => {
+    const core = createCore({
+      collections: [categories],
+      globals: [siteSettings],
+    });
+
+    expect(core.globals).toHaveLength(1);
+    expect(core.getGlobal("site")).toBe(siteSettings);
+  });
+
+  it("defaults globals to an empty array when omitted", () => {
+    const core = createCore({ collections: [categories] });
+    expect(core.globals).toEqual([]);
+  });
+
+  it("returns undefined for an unknown global slug", () => {
+    const core = createCore({
+      collections: [categories],
+      globals: [siteSettings],
+    });
+    expect(core.getGlobal("unknown")).toBeUndefined();
+  });
+
+  it("resolves a global's relation field against a declared collection", () => {
+    const globalWithRelation: GlobalSchema = {
+      ...siteSettings,
+      fields: [
+        ...siteSettings.fields,
+        { type: "relation", name: "featured", collection: "categories" },
+      ],
+    };
+
+    const core = createCore({
+      collections: [categories],
+      globals: [globalWithRelation],
+    });
+    expect(core.getGlobal("site")).toBe(globalWithRelation);
+  });
+
+  it("rejects the whole schema when a global's relation points to a missing collection", () => {
+    const brokenGlobal: GlobalSchema = {
+      ...siteSettings,
+      fields: [
+        ...siteSettings.fields,
+        { type: "relation", name: "author", collection: "authors" },
+      ],
+    };
+
+    expect(() =>
+      createCore({ collections: [categories], globals: [brokenGlobal] }),
+    ).toThrow(GlobalSchemaError);
   });
 });

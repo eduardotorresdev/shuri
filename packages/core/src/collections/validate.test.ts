@@ -36,14 +36,18 @@ describe("validateCollections", () => {
   it("rejects duplicate collection slugs", () => {
     const issues = validateCollections([baseCollection(), baseCollection()]);
     expect(issues).toEqual(
-      expect.arrayContaining([expect.stringContaining('duplicate collection slug "posts"')]),
+      expect.arrayContaining([
+        expect.stringContaining('duplicate collection slug "posts"'),
+      ]),
     );
   });
 
   it("requires at least one field", () => {
     const issues = validateCollections([baseCollection({ fields: [] })]);
     expect(issues).toEqual(
-      expect.arrayContaining([expect.stringContaining("must declare at least one field")]),
+      expect.arrayContaining([
+        expect.stringContaining("must declare at least one field"),
+      ]),
     );
   });
 
@@ -64,10 +68,14 @@ describe("validateCollections", () => {
   describe("select field", () => {
     it("requires at least one option", () => {
       const issues = validateCollections([
-        baseCollection({ fields: [{ type: "select", name: "status", options: [] }] }),
+        baseCollection({
+          fields: [{ type: "select", name: "status", options: [] }],
+        }),
       ]);
       expect(issues).toEqual(
-        expect.arrayContaining([expect.stringContaining("must declare at least one option")]),
+        expect.arrayContaining([
+          expect.stringContaining("must declare at least one option"),
+        ]),
       );
     });
 
@@ -87,7 +95,9 @@ describe("validateCollections", () => {
         }),
       ]);
       expect(issues).toEqual(
-        expect.arrayContaining([expect.stringContaining('duplicate option value "draft"')]),
+        expect.arrayContaining([
+          expect.stringContaining('duplicate option value "draft"'),
+        ]),
       );
     });
   });
@@ -96,11 +106,21 @@ describe("validateCollections", () => {
     it("rejects min greater than max", () => {
       const issues = validateCollections([
         baseCollection({
-          fields: [{ type: "number", name: "rating", kind: "integer", min: 10, max: 1 }],
+          fields: [
+            {
+              type: "number",
+              name: "rating",
+              kind: "integer",
+              min: 10,
+              max: 1,
+            },
+          ],
         }),
       ]);
       expect(issues).toEqual(
-        expect.arrayContaining([expect.stringContaining('"min" (10) cannot be greater than "max" (1)')]),
+        expect.arrayContaining([
+          expect.stringContaining('"min" (10) cannot be greater than "max" (1)'),
+        ]),
       );
     });
 
@@ -108,7 +128,13 @@ describe("validateCollections", () => {
       const issues = validateCollections([
         baseCollection({
           fields: [
-            { type: "number", name: "rating", kind: "integer", sign: "positive", min: -5 },
+            {
+              type: "number",
+              name: "rating",
+              kind: "integer",
+              sign: "positive",
+              min: -5,
+            },
           ],
         }),
       ]);
@@ -123,7 +149,13 @@ describe("validateCollections", () => {
       const issues = validateCollections([
         baseCollection({
           fields: [
-            { type: "number", name: "rating", kind: "integer", sign: "negative", max: 5 },
+            {
+              type: "number",
+              name: "rating",
+              kind: "integer",
+              sign: "negative",
+              max: 5,
+            },
           ],
         }),
       ]);
@@ -150,7 +182,15 @@ describe("validateCollections", () => {
     it("accepts fractional bounds when kind is float", () => {
       const issues = validateCollections([
         baseCollection({
-          fields: [{ type: "number", name: "price", kind: "float", min: 0.5, max: 9.99 }],
+          fields: [
+            {
+              type: "number",
+              name: "price",
+              kind: "float",
+              min: 0.5,
+              max: 9.99,
+            },
+          ],
         }),
       ]);
       expect(issues).toEqual([]);
@@ -165,7 +205,9 @@ describe("validateCollections", () => {
         }),
       ]);
       expect(issues).toEqual(
-        expect.arrayContaining([expect.stringContaining('references unknown collection "authors"')]),
+        expect.arrayContaining([
+          expect.stringContaining('references unknown collection "authors"'),
+        ]),
       );
     });
 

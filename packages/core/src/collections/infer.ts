@@ -4,7 +4,9 @@ import type { CollectionSchema } from "./types.js";
 /** Flattens an intersection/mapped-type chain into a plain object type, so editors show the resolved shape on hover. */
 export type Prettify<T> = { [K in keyof T]: T[K] } & {};
 
-type FieldValue<F extends Field> = F extends { type: "text" | "textarea" | "email" }
+type FieldValue<F extends Field> = F extends {
+  type: "text" | "textarea" | "email";
+}
   ? string
   : F extends SelectField
     ? F["options"][number]["value"]
@@ -27,7 +29,9 @@ type OptionalFields<Fields extends readonly Field[]> = {
 };
 
 /** Maps a collection's `fields` to the plain object shape its records hold, one field type at a time. */
-export type InferFields<Fields extends readonly Field[]> = Prettify<RequiredFields<Fields> & OptionalFields<Fields>>;
+export type InferFields<Fields extends readonly Field[]> = Prettify<
+  RequiredFields<Fields> & OptionalFields<Fields>
+>;
 
 /** Maps a single `CollectionSchema` to the plain object shape of its records (excluding `id`). */
 export type InferCollection<C extends CollectionSchema> = InferFields<C["fields"]>;
