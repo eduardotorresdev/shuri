@@ -98,8 +98,9 @@ export function object<T extends object>(fields: {
 }
 
 /**
- * Like `array`, but for a value of unknown shape (untrusted input: parsed JSON, a query param, ...)
- * instead of one already known to be an array. Reports `message` and skips item validation if it isn't.
+ * Validates a value of unknown shape (untrusted input: parsed JSON, a query param, ...) as an array,
+ * like `array` validates a value already known to be one. Reports `message` and skips item
+ * validation if it isn't.
  * @param itemValidator - The validator run against each item, once the value is confirmed to be an array.
  * @param [message] - The issue message reported when the value isn't an array.
  * @returns A validator that fails when the value isn't an array, else delegates to `array`.
@@ -118,9 +119,9 @@ export function arrayOf<T>(
 }
 
 /**
- * Validates every value of a plain object keyed by arbitrary strings (a dictionary/map), unlike
- * `object`, which validates a fixed, known set of keys. For a value of unknown shape (untrusted
- * input), reports `message` and skips item validation if it isn't a plain object.
+ * Validates every value of a plain object keyed by arbitrary strings (a dictionary/map), like
+ * `object` validates a fixed, known set of keys. For a value of unknown shape (untrusted input),
+ * reports `message` and skips item validation if it isn't a plain object.
  * @param valueValidator - The validator run against each value of the object.
  * @param [message] - The issue message reported when the value isn't a plain object.
  * @returns A validator that fails when the value isn't a plain object, else validates each entry.
@@ -174,7 +175,7 @@ export interface KeyedArrayOptions<T> {
 }
 
 /**
- * Like `array`, but paths items by a caller-provided key instead of their index.
+ * Paths items by a caller-provided key, like `array` paths them by index.
  * @param keyOf - Derives the path key for an item.
  * @param itemValidator - The validator run against each item.
  * @param [options] - Options controlling duplicate-key detection and reporting.

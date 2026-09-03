@@ -1,6 +1,6 @@
 import type { Field } from "../collections/fields.js";
 
-/** Groups globals for display, e.g. in a future admin UI, keyed by `title` rather than a separate registry. */
+/** Groups globals for display, e.g. in a future admin UI, keyed by `title`. */
 export interface GlobalCategory {
   title: string;
 }

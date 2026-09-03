@@ -7,7 +7,8 @@ import { matchGlobalRoute } from "./routes.js";
 
 /**
  * Minimal shape `createGlobalsApiHandler` needs. `ShuriApp` from `@shuri/sdk` satisfies this
- * structurally, so this package depends only on `@shuri/store`, not on `@shuri/sdk`/`@shuri/core`.
+ * structurally, so this package's sole dependency is `@shuri/store`, keeping `@shuri/sdk`/
+ * `@shuri/core` out of the picture.
  */
 export interface GlobalsApiApp<G extends readonly GlobalSchema[] = GlobalSchema[]> {
   store: Pick<Store<CollectionSchema[], G>, "global">;

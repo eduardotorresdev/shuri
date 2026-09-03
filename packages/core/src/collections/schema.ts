@@ -13,7 +13,8 @@ function collectionValidator(slugs: Set<string>): Validator<CollectionSchema> {
 }
 
 /**
- * Validates the shape of a collections schema, not the records it describes.
+ * Validates a collections schema's own shape; the records it describes are validated separately
+ * (see `recordValidator`).
  * @param collections - The declared collections to validate.
  * @param ctx - The validation context issues are reported to.
  */

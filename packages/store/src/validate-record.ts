@@ -11,7 +11,7 @@ import type { RecordInput } from "./record.js";
  * @param schema - The `{ slug, fields }` schema (a collection or a global) whose declared fields validate `data`.
  * @param data - The candidate record to validate.
  * @param [options] - Validation options, e.g. `{ partial: true }` for updates.
- * @returns Nothing; throws instead of returning on invalid input.
+ * @returns void; validation failures throw `RecordValidationError`.
  */
 export function assertValidRecord(
   schema: RecordSchema,

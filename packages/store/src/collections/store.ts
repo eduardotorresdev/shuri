@@ -9,7 +9,7 @@ import type { Query } from "./query.js";
 export interface CollectionStore<R = RecordInput> {
   findMany(query?: Query): Promise<StoreRecord<R>[]>;
   findOne(id: RecordId): Promise<StoreRecord<R> | undefined>;
-  /** Like `findOne`, but throws `RecordNotFoundError` instead of returning `undefined`. */
+  /** Throws `RecordNotFoundError` when the record doesn't exist, like `findOne` returns `undefined`. */
   get(id: RecordId): Promise<StoreRecord<R>>;
   count(query?: Query): Promise<number>;
   insert(data: R): Promise<StoreRecord<R>>;

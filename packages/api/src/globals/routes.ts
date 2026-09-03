@@ -4,9 +4,9 @@ export interface GlobalRoute {
 }
 
 /**
- * Matches `{basePath}/:slug` against `pathname`. Unlike `matchCollectionRoute`, there's no `:id`
- * segment: a global is a single record. Returns `undefined` for anything outside `basePath` or
- * with extra path segments.
+ * Matches `{basePath}/:slug` against `pathname`: a global is a single record, so the match ends at
+ * `:slug` (`matchCollectionRoute` also matches a trailing `:id`). Returns `undefined` for anything
+ * outside `basePath` or with extra path segments.
  * @param pathname - The request URL's pathname.
  * @param basePath - The path prefix global routes are mounted under.
  * @returns The matched route, or `undefined` if `pathname` doesn't match.

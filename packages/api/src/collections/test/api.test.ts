@@ -7,10 +7,10 @@ import { createApiHandler } from "../handler.js";
 /**
  * End-to-end coverage across `@shuri/core`, `@shuri/store` and `@shuri/store-memory`: a real
  * `Store` wired to a real (in-memory) adapter, driven only through HTTP `Request`/`Response`.
- * Deliberately doesn't go through `@shuri/sdk`'s `create()` - `@shuri/sdk` depends on this
- * package to expose `app.handler`, so this package can't depend back on `@shuri/sdk` (even in
- * tests) without a cycle. The same `app.handler` scenario, built via `create()`, is covered in
- * `@shuri/sdk`'s own integration test.
+ * Builds the `Store`/adapter directly, keeping this test independent of `@shuri/sdk`'s `create()`:
+ * `@shuri/sdk` depends on this package to expose `app.handler`, so a dependency back on
+ * `@shuri/sdk` (even in tests) would form a cycle. The same `app.handler` scenario, built via
+ * `create()`, is covered in `@shuri/sdk`'s own integration test.
  * Unit tests for the pieces this exercises live next to their source (`handler.test.ts`,
  * `query.test.ts`, `response.test.ts`, ...).
  */

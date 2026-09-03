@@ -1,6 +1,6 @@
 /**
- * Engine-agnostic filter/sort/pagination AST. Adapters translate this into their own
- * native query language (SQL, an ORM's builder, etc.) instead of accepting raw queries.
+ * Engine-agnostic filter/sort/pagination AST that adapters translate into their own native query
+ * language (SQL, an ORM's builder, etc.).
  */
 export type FilterOp =
   | { op: "eq"; value: unknown }

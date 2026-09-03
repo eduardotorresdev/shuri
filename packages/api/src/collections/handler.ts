@@ -9,9 +9,9 @@ import { matchCollectionRoute } from "./routes.js";
 
 /**
  * Minimal shape `createApiHandler` needs. `ShuriApp` from `@shuri/sdk` satisfies this structurally,
- * so this package depends only on `@shuri/store`, not on `@shuri/sdk`/`@shuri/core` themselves.
- * `store.collection(slug)` is the app's own collection resolver (throwing `UnknownCollectionError`
- * for an undeclared slug) — this handler doesn't reimplement that lookup.
+ * so this package's sole dependency is `@shuri/store`, keeping `@shuri/sdk`/`@shuri/core` out of the
+ * picture. `store.collection(slug)` is the app's own collection resolver (throwing
+ * `UnknownCollectionError` for an undeclared slug); this handler reuses that lookup as-is.
  */
 export interface ApiApp<T extends readonly CollectionSchema[] = CollectionSchema[]> {
   store: Pick<Store<T>, "collection">;
@@ -35,10 +35,10 @@ export interface CreateApiHandlerOptions {
  * Framework-agnostic by design: it only touches `Request`/`Response`, so Deno/Bun can serve it
  * directly, Hono can forward `c.req.raw` to it, and a thin per-engine adapter covers the rest.
  *
- * This layer does not validate records itself: `@shuri/store`'s `insert`/`update` already guard
- * every write against the collection's declared fields (so does `@shuri/sdk`, since both go
- * through the same `CollectionStore`), throwing `RecordValidationError` on a bad body. This
- * handler's job is only to translate that (via `response.ts#toErrorResponse`) into a 400 response.
+ * Record validation happens in `@shuri/store`'s `insert`/`update`, which already guard every write
+ * against the collection's declared fields (so does `@shuri/sdk`, since both go through the same
+ * `CollectionStore`), throwing `RecordValidationError` on a bad body. This handler's job is to
+ * translate that (via `response.ts#toErrorResponse`) into a 400 response.
  * @param app - The `{ store }` exposing every collection to serve.
  * @param [options] - Options controlling the handler, e.g. `basePath`.
  * @returns A framework-agnostic HTTP handler serving `app`'s collections.

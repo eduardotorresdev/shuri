@@ -12,7 +12,8 @@ function globalValidator(collectionSlugs: Set<string>): Validator<GlobalSchema> 
 }
 
 /**
- * Validates the shape of a globals schema, not the record each global describes.
+ * Validates a globals schema's own shape; the record(s) it describes are validated separately
+ * (see `recordValidator`).
  * @param collectionSlugs - The collection slugs a global's relation fields may reference.
  * @returns A validator for a declared `globals` array.
  */

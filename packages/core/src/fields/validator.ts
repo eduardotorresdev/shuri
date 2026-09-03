@@ -66,8 +66,9 @@ function relationFieldValidator(
 }
 
 /**
- * Validates a single declared field's own shape (name, plus its type-specific constraints), not the
- * records it describes. Shared by collections and globals, whose fields are validated identically.
+ * Validates a single declared field's own shape (name, plus its type-specific constraints); the
+ * records it describes are validated separately (see `recordValidator`). Shared by collections and
+ * globals, whose fields are validated identically.
  * @param slugs - The collection slugs relation fields may reference.
  * @returns A validator for a single declared field.
  */
