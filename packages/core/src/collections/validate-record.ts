@@ -1,0 +1,92 @@
+import { all, object, required, validate, type Issue, type Validator } from "@shuri/validate";
+import type { Field } from "./fields.js";
+import type { CollectionSchema } from "./types.js";
+
+export type RecordInput = Record<string, unknown>;
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export interface RecordValidatorOptions {
+  /**
+   * Skip "required" checks. Use for partial updates (PATCH), where only the touched fields are
+   * present and the rest of the record is left untouched.
+   */
+  partial?: boolean;
+}
+
+/** Validates a single field's value against its own type/format/range constraints, once present. */
+function valueValidator(field: Field): Validator<unknown> {
+  return (value, ctx) => {
+    switch (field.type) {
+      case "text":
+      case "textarea":
+      case "email": {
+        if (typeof value !== "string") {
+          ctx.addIssue(`"${field.name}" must be a string`);
+          return;
+        }
+        if (field.type === "email") {
+          if (!EMAIL_RE.test(value)) ctx.addIssue(`"${field.name}" must be a valid email`);
+          return;
+        }
+        if (field.minLength !== undefined && value.length < field.minLength) {
+          ctx.addIssue(`"${field.name}" must be at least ${field.minLength} characters`);
+        }
+        if (field.maxLength !== undefined && value.length > field.maxLength) {
+          ctx.addIssue(`"${field.name}" must be at most ${field.maxLength} characters`);
+        }
+        return;
+      }
+      case "select": {
+        const allowed = new Set(field.options.map((option) => option.value));
+        if (typeof value !== "string" || !allowed.has(value)) ctx.addIssue(`"${field.name}" is not a valid option`);
+        return;
+      }
+      case "number": {
+        if (typeof value !== "number" || Number.isNaN(value)) {
+          ctx.addIssue(`"${field.name}" must be a number`);
+          return;
+        }
+        if (field.kind === "integer" && !Number.isInteger(value)) ctx.addIssue(`"${field.name}" must be an integer`);
+        if (field.sign === "positive" && value < 0) ctx.addIssue(`"${field.name}" must be positive`);
+        if (field.sign === "negative" && value > 0) ctx.addIssue(`"${field.name}" must be negative`);
+        if (field.min !== undefined && value < field.min) ctx.addIssue(`"${field.name}" must be >= ${field.min}`);
+        if (field.max !== undefined && value > field.max) ctx.addIssue(`"${field.name}" must be <= ${field.max}`);
+        return;
+      }
+      case "boolean": {
+        if (typeof value !== "boolean") ctx.addIssue(`"${field.name}" must be a boolean`);
+        return;
+      }
+      case "relation": {
+        const values = field.multiple ? value : [value];
+        if (!Array.isArray(values) || values.some((item) => typeof item !== "string")) {
+          ctx.addIssue(`"${field.name}" must reference record id(s) as string${field.multiple ? "s" : ""}`);
+        }
+        return;
+      }
+    }
+  };
+}
+
+/** Validates one declared field: required check (unless `partial`), then its value once present. */
+function fieldValidator(field: Field, options: RecordValidatorOptions): Validator<unknown> {
+  const validators: Validator<unknown>[] = [];
+  if (field.required && !options.partial) validators.push(required(`"${field.name}" is required`));
+  validators.push((value, ctx) => {
+    if (value === undefined || value === null) return;
+    valueValidator(field)(value, ctx);
+  });
+  return all(...validators);
+}
+
+/** Validates a record's field values against a collection's declared `fields`. */
+export function recordValidator(collection: CollectionSchema, options: RecordValidatorOptions = {}): Validator<RecordInput> {
+  const fields: Record<string, Validator<unknown>> = {};
+  for (const field of collection.fields) fields[field.name] = fieldValidator(field, options);
+  return object<RecordInput>(fields);
+}
+
+export function validateRecord(collection: CollectionSchema, data: RecordInput, options?: RecordValidatorOptions): Issue[] {
+  return validate(data, recordValidator(collection, options), "record");
+}
