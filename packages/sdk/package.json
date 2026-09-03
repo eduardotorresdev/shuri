@@ -14,6 +14,7 @@
   "scripts": {
     "build": "tsgo -p tsconfig.build.json",
     "typecheck": "tsgo --noEmit -p tsconfig.json",
+    "lint": "oxlint",
     "test": "vitest run"
   },
   "dependencies": {
