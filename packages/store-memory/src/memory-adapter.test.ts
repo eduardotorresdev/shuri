@@ -1,8 +1,15 @@
-import type { CollectionSchema } from "@shuri/core";
+import type { CollectionSchema, GlobalSchema } from "@shuri/core";
 import type { StoreAdapter } from "@shuri/store";
 import { RecordNotFoundError } from "@shuri/store";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createMemoryAdapter } from "./memory-adapter.js";
+
+const siteSettings: GlobalSchema = {
+  slug: "site",
+  title: "Site settings",
+  category: { title: "Geral" },
+  fields: [{ type: "text", name: "name", required: true }],
+};
 
 const services: CollectionSchema = {
   slug: "services",
@@ -30,23 +37,34 @@ describe("createMemoryAdapter", () => {
   });
 
   it("finds a record by id, scoped to its collection", async () => {
-    const record = await adapter.insert(services, { name: "Haircut", price: 40 });
+    const record = await adapter.insert(services, {
+      name: "Haircut",
+      price: 40,
+    });
     expect(await adapter.findOne(services, record.id)).toEqual(record);
     expect(await adapter.findOne(services, "missing")).toBeUndefined();
   });
 
   it("updates an existing record, merging fields", async () => {
-    const record = await adapter.insert(services, { name: "Haircut", price: 40 });
+    const record = await adapter.insert(services, {
+      name: "Haircut",
+      price: 40,
+    });
     const updated = await adapter.update(services, record.id, { price: 50 });
     expect(updated).toEqual({ id: record.id, name: "Haircut", price: 50 });
   });
 
   it("throws when updating a record that doesn't exist", async () => {
-    await expect(adapter.update(services, "missing", { price: 50 })).rejects.toThrow(RecordNotFoundError);
+    await expect(adapter.update(services, "missing", { price: 50 })).rejects.toThrow(
+      RecordNotFoundError,
+    );
   });
 
   it("deletes a record", async () => {
-    const record = await adapter.insert(services, { name: "Haircut", price: 40 });
+    const record = await adapter.insert(services, {
+      name: "Haircut",
+      price: 40,
+    });
     await adapter.delete(services, record.id);
     expect(await adapter.findOne(services, record.id)).toBeUndefined();
   });
@@ -67,10 +85,14 @@ describe("createMemoryAdapter", () => {
     });
 
     it("filters using where operators", async () => {
-      const affordable = await adapter.findMany(services, { where: { price: { op: "lte", value: 50 } } });
+      const affordable = await adapter.findMany(services, {
+        where: { price: { op: "lte", value: 50 } },
+      });
       expect(affordable.map((r) => r.name).toSorted()).toEqual(["Haircut", "Manicure"]);
 
-      const exact = await adapter.findMany(services, { where: { name: { op: "eq", value: "Massage" } } });
+      const exact = await adapter.findMany(services, {
+        where: { name: { op: "eq", value: "Massage" } },
+      });
       expect(exact.map((r) => r.name)).toEqual(["Massage"]);
 
       const inList = await adapter.findMany(services, {
@@ -80,12 +102,18 @@ describe("createMemoryAdapter", () => {
     });
 
     it("sorts by a field and direction", async () => {
-      const sorted = await adapter.findMany(services, { orderBy: [{ field: "price", direction: "desc" }] });
+      const sorted = await adapter.findMany(services, {
+        orderBy: [{ field: "price", direction: "desc" }],
+      });
       expect(sorted.map((r) => r.name)).toEqual(["Massage", "Haircut", "Manicure"]);
     });
 
     it("paginates with limit and offset", async () => {
-      const page = await adapter.findMany(services, { orderBy: [{ field: "price" }], limit: 1, offset: 1 });
+      const page = await adapter.findMany(services, {
+        orderBy: [{ field: "price" }],
+        limit: 1,
+        offset: 1,
+      });
       expect(page.map((r) => r.name)).toEqual(["Haircut"]);
     });
   });
@@ -93,6 +121,35 @@ describe("createMemoryAdapter", () => {
   it("counts records matching a query", async () => {
     await adapter.insert(services, { name: "Haircut", price: 40 });
     await adapter.insert(services, { name: "Massage", price: 80 });
-    expect(await adapter.count(services, { where: { price: { op: "gt", value: 50 } } })).toBe(1);
+    expect(
+      await adapter.count(services, {
+        where: { price: { op: "gt", value: 50 } },
+      }),
+    ).toBe(1);
+  });
+
+  describe("global", () => {
+    it("returns undefined before the first update", async () => {
+      expect(await adapter.findGlobal(siteSettings)).toBeUndefined();
+    });
+
+    it("updates the global record, merging fields", async () => {
+      await adapter.updateGlobal(siteSettings, { name: "Acme" });
+      expect(await adapter.findGlobal(siteSettings)).toEqual({ name: "Acme" });
+
+      await adapter.updateGlobal(siteSettings, { name: "Acme Co" });
+      expect(await adapter.findGlobal(siteSettings)).toEqual({
+        name: "Acme Co",
+      });
+    });
+
+    it("keeps a separate record per global slug", async () => {
+      const otherGlobal: GlobalSchema = { ...siteSettings, slug: "seo" };
+      await adapter.updateGlobal(siteSettings, { name: "Acme" });
+      await adapter.updateGlobal(otherGlobal, { name: "SEO" });
+
+      expect(await adapter.findGlobal(siteSettings)).toEqual({ name: "Acme" });
+      expect(await adapter.findGlobal(otherGlobal)).toEqual({ name: "SEO" });
+    });
   });
 });

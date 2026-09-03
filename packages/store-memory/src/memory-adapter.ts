@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
-import type { CollectionSchema } from "@shuri/core";
+import type { CollectionSchema, GlobalSchema } from "@shuri/core";
 import {
   RecordNotFoundError,
   type FilterOp,
   type OrderBy,
   type Query,
   type RecordId,
+  type RecordInput,
   type StoreAdapter,
   type StoreRecord,
   type Where,
@@ -46,7 +47,9 @@ function matchesFilter(value: unknown, filter: FilterOp): boolean {
 }
 
 function matchesWhere(record: StoreRecord, where: Where): boolean {
-  return Object.entries(where).every(([field, filter]) => matchesFilter(record[field], filter));
+  return Object.entries(where).every(([field, filter]) =>
+    matchesFilter(record[field], filter),
+  );
 }
 
 function sortRecords(records: StoreRecord[], orderBy: OrderBy[]): StoreRecord[] {
@@ -73,6 +76,7 @@ function applyQuery(records: StoreRecord[], query?: Query): StoreRecord[] {
  */
 export function createMemoryAdapter(): StoreAdapter {
   const tables = new Map<string, Map<RecordId, StoreRecord>>();
+  const globalTable = new Map<string, RecordInput>();
 
   function tableFor(collection: CollectionSchema): Map<RecordId, StoreRecord> {
     let table = tables.get(collection.slug);
@@ -108,6 +112,14 @@ export function createMemoryAdapter(): StoreAdapter {
     },
     async delete(collection, id) {
       tableFor(collection).delete(id);
+    },
+    async findGlobal(global: GlobalSchema) {
+      return globalTable.get(global.slug);
+    },
+    async updateGlobal(global: GlobalSchema, data) {
+      const updated = { ...globalTable.get(global.slug), ...data };
+      globalTable.set(global.slug, updated);
+      return updated;
     },
   };
 }
