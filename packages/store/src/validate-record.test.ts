@@ -25,7 +25,9 @@ describe("assertValidRecord", () => {
       const validationError = error as RecordValidationError;
       expect(validationError.collection).toBe("services");
       expect(validationError.issues).toEqual(
-        expect.arrayContaining([expect.objectContaining({ message: '"name" is required' })]),
+        expect.arrayContaining([
+          expect.objectContaining({ message: '"name" is required' }),
+        ]),
       );
     }
   });
