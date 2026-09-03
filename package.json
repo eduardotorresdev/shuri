@@ -4,6 +4,7 @@
   "packageManager": "pnpm@11.9.0",
   "scripts": {
     "build": "turbo run build",
+    "demo": "turbo run start --filter=@shuri/demo",
     "dev": "turbo run dev",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",

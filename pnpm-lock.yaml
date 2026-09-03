@@ -58,6 +58,25 @@ importers:
         specifier: ^3.2.4
         version: 3.2.7(@types/node@22.20.1)
 
+  packages/demo:
+    dependencies:
+      '@shuri/core':
+        specifier: workspace:*
+        version: link:../core
+      '@shuri/sdk':
+        specifier: workspace:*
+        version: link:../sdk
+      '@shuri/store-memory':
+        specifier: workspace:*
+        version: link:../store-memory
+    devDependencies:
+      '@shuri/config':
+        specifier: workspace:*
+        version: link:../config
+      '@types/node':
+        specifier: ^22.13.1
+        version: 22.20.1
+
   packages/sdk:
     dependencies:
       '@shuri/api':

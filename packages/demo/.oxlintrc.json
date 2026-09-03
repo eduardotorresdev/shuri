@@ -1,0 +1,11 @@
+{
+  "extends": ["../config/oxlintrc.base.json"],
+  "overrides": [
+    {
+      "files": ["src/server.ts", "src/node-http-adapter.ts"],
+      "rules": {
+        "no-console": "off"
+      }
+    }
+  ]
+}
