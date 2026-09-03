@@ -14,6 +14,7 @@ export interface JsonSchema {
   properties?: Record<string, JsonSchema>;
   required?: string[];
   additionalProperties?: boolean;
+  readOnly?: boolean;
 }
 
 export function fieldSchema(field: Field): JsonSchema {
@@ -52,7 +53,12 @@ export function fieldSchema(field: Field): JsonSchema {
 }
 
 export function collectionSchema(collection: CollectionSchema): JsonSchema {
-  const properties: Record<string, JsonSchema> = { id: { type: "string" } };
+  // `readOnly` is what tells OpenAPI the id belongs to responses only: the store generates it and
+  // rejects a payload carrying one, so the same schema can back both the request body and the
+  // response without promising a field that would earn a 400.
+  const properties: Record<string, JsonSchema> = {
+    id: { type: "string", readOnly: true },
+  };
   const required: string[] = [];
 
   for (const field of collection.fields) {
