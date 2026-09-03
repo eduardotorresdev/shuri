@@ -28,11 +28,16 @@ beforeEach(() => {
 describe("app.handler", () => {
   it("serves collections declared on the app over HTTP", async () => {
     const insertResponse = await handler(
-      new Request("http://localhost/collections/services", { method: "POST", body: JSON.stringify({ name: "Haircut" }) }),
+      new Request("http://localhost/collections/services", {
+        method: "POST",
+        body: JSON.stringify({ name: "Haircut" }),
+      }),
     );
     expect(insertResponse.status).toBe(201);
 
-    const listResponse = await handler(new Request("http://localhost/collections/services"));
+    const listResponse = await handler(
+      new Request("http://localhost/collections/services"),
+    );
     expect(await listResponse.json()).toMatchObject([{ name: "Haircut" }]);
   });
 
@@ -40,15 +45,78 @@ describe("app.handler", () => {
     const app = create({ collections, adapter: createMemoryAdapter() });
     const inserted = await app.collections.services.insert({ name: "Massage" });
 
-    const response = await app.handler(new Request(`http://localhost/collections/services/${inserted.id}`));
+    const response = await app.handler(
+      new Request(`http://localhost/collections/services/${inserted.id}`),
+    );
     expect(await response.json()).toEqual(inserted);
   });
 
   it("honors the api.basePath option passed to create()", async () => {
-    const app = create({ collections, adapter: createMemoryAdapter(), api: { basePath: "/api" } });
+    const app = create({
+      collections,
+      adapter: createMemoryAdapter(),
+      api: { basePath: "/api" },
+    });
     const response = await app.handler(
-      new Request("http://localhost/api/services", { method: "POST", body: JSON.stringify({ name: "Haircut" }) }),
+      new Request("http://localhost/api/services", {
+        method: "POST",
+        body: JSON.stringify({ name: "Haircut" }),
+      }),
     );
     expect(response.status).toBe(201);
+  });
+});
+
+const globals = [
+  {
+    slug: "site",
+    title: "Site settings",
+    category: { title: "Geral" },
+    fields: [{ type: "text", name: "name", required: true }],
+  },
+] as const;
+
+describe("app.handler with globals", () => {
+  it("serves globals declared on the app over HTTP", async () => {
+    const app = create({
+      collections,
+      globals,
+      adapter: createMemoryAdapter(),
+    });
+
+    const patchResponse = await app.handler(
+      new Request("http://localhost/globals/site", {
+        method: "PATCH",
+        body: JSON.stringify({ name: "Acme" }),
+      }),
+    );
+    expect(patchResponse.status).toBe(200);
+    expect(await patchResponse.json()).toEqual({ name: "Acme" });
+
+    const getResponse = await app.handler(new Request("http://localhost/globals/site"));
+    expect(await getResponse.json()).toEqual({ name: "Acme" });
+  });
+
+  it("reflects a global updated through app.globals when read back over HTTP", async () => {
+    const app = create({
+      collections,
+      globals,
+      adapter: createMemoryAdapter(),
+    });
+    await app.globals.site.update({ name: "Acme" });
+
+    const response = await app.handler(new Request("http://localhost/globals/site"));
+    expect(await response.json()).toEqual({ name: "Acme" });
+  });
+
+  it("honors the globalsApi.basePath option passed to create()", async () => {
+    const app = create({
+      collections,
+      globals,
+      adapter: createMemoryAdapter(),
+      globalsApi: { basePath: "/api-globals" },
+    });
+    const response = await app.handler(new Request("http://localhost/api-globals/site"));
+    expect(response.status).toBe(200);
   });
 });
