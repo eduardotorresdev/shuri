@@ -17,7 +17,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@shuri/core": "workspace:*"
+    "@shuri/core": "workspace:*",
+    "@shuri/validate": "workspace:*"
   },
   "devDependencies": {
     "@shuri/config": "workspace:*",

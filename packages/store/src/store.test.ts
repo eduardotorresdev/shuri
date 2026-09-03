@@ -1,8 +1,8 @@
 import type { CollectionSchema } from "@shuri/core";
 import { createCore } from "@shuri/core";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { StoreAdapter } from "./adapter.js";
-import { RecordNotFoundError } from "./errors.js";
+import { RecordNotFoundError, RecordValidationError, UnknownCollectionError } from "./errors.js";
 import type { RecordId, RecordInput, StoreRecord } from "./record.js";
 import { createStore, type CollectionStore } from "./store.js";
 
@@ -95,6 +95,26 @@ describe("createStore", () => {
     await collection.insert({ name: "Massage", price: 80 });
     expect(await collection.count()).toBe(2);
   });
+
+  it("rejects an insert that doesn't satisfy the collection's fields, without touching the adapter", async () => {
+    const adapter = createFakeAdapter();
+    const spiedInsert = vi.spyOn(adapter, "insert");
+    const invalidCollection = createStore(createCore({ collections: [services] }), adapter).collection("services");
+
+    await expect(invalidCollection.insert({ price: 40 })).rejects.toThrow(RecordValidationError);
+    expect(spiedInsert).not.toHaveBeenCalled();
+  });
+
+  it("rejects an update that doesn't satisfy the collection's fields, without touching the adapter", async () => {
+    const adapter = createFakeAdapter();
+    const spiedUpdate = vi.spyOn(adapter, "update");
+    const guardedCollection = createStore(createCore({ collections: [services] }), adapter).collection("services");
+    const inserted = await guardedCollection.insert({ name: "Haircut", price: 40 });
+    spiedUpdate.mockClear();
+
+    await expect(guardedCollection.update(inserted.id, { price: -10 })).rejects.toThrow(RecordValidationError);
+    expect(spiedUpdate).not.toHaveBeenCalled();
+  });
 });
 
 describe("Store.collection", () => {
@@ -115,6 +135,6 @@ describe("Store.collection", () => {
   it("throws for an unknown collection slug", () => {
     const core = createCore({ collections: [services] });
     const store = createStore(core, createFakeAdapter());
-    expect(() => store.collection("unknown" as never)).toThrow('Unknown collection "unknown"');
+    expect(() => store.collection("unknown" as never)).toThrow(UnknownCollectionError);
   });
 });

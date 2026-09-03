@@ -1,8 +1,9 @@
 import type { CollectionSchema, Core, InferCollections } from "@shuri/core";
 import type { StoreAdapter } from "./adapter.js";
-import { RecordNotFoundError } from "./errors.js";
+import { RecordNotFoundError, UnknownCollectionError } from "./errors.js";
 import type { Query } from "./query.js";
 import type { RecordId, RecordInput, StoreRecord } from "./record.js";
+import { assertValidRecord } from "./validate-record.js";
 
 /** Persistence operations scoped to a single collection. */
 export interface CollectionStore<R = RecordInput> {
@@ -34,8 +35,14 @@ function bindCollection(collection: CollectionSchema, adapter: StoreAdapter): Co
       return record;
     },
     count: (query) => adapter.count(collection, query),
-    insert: (data) => adapter.insert(collection, data),
-    update: (id, data) => adapter.update(collection, id, data),
+    async insert(data) {
+      assertValidRecord(collection, data);
+      return adapter.insert(collection, data);
+    },
+    async update(id, data) {
+      assertValidRecord(collection, data, { partial: true });
+      return adapter.update(collection, id, data);
+    },
     delete: (id) => adapter.delete(collection, id),
   };
 }
@@ -50,7 +57,7 @@ export function createStore<T extends readonly CollectionSchema[]>(core: Core<T>
       if (cached) return cached as never;
 
       const schema = core.getCollection(slug as T[number]["slug"]);
-      if (!schema) throw new Error(`Unknown collection "${slug}"`);
+      if (!schema) throw new UnknownCollectionError(slug);
 
       const bound = bindCollection(schema as unknown as CollectionSchema, adapter);
       collections.set(slug, bound);
