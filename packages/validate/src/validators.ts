@@ -32,6 +32,23 @@ export function refine<T>(check: (value: T) => boolean, message: string | ((valu
   };
 }
 
+/** Skips `validator` when the value is `undefined`, so callers don't have to guard optional fields by hand. */
+export function optional<T>(validator: Validator<T>): Validator<T | undefined> {
+  return (value, ctx) => {
+    if (value !== undefined) validator(value, ctx);
+  };
+}
+
+/** Reports an issue when the value isn't one of `allowed` (by `===`). */
+export function oneOf<T>(allowed: readonly T[], message?: string | ((value: T) => string)): Validator<T> {
+  return (value, ctx) => {
+    if (!allowed.includes(value)) {
+      const fallback = `must be one of ${allowed.join(", ")}`;
+      ctx.addIssue(typeof message === "function" ? message(value) : (message ?? fallback));
+    }
+  };
+}
+
 /** Runs every validator against the same value and context, collecting all of their issues. */
 export function all<T>(...validators: Validator<T>[]): Validator<T> {
   return (value, ctx) => {
@@ -45,6 +62,37 @@ export function object<T extends object>(fields: { [K in keyof T]?: Validator<T[
     for (const key of Object.keys(fields) as (keyof T)[]) {
       const fieldValidator = fields[key];
       if (fieldValidator) fieldValidator(value[key], ctx.at(String(key)));
+    }
+  };
+}
+
+/**
+ * Like `array`, but for a value of unknown shape (untrusted input: parsed JSON, a query param, ...)
+ * instead of one already known to be an array. Reports `message` and skips item validation if it isn't.
+ */
+export function arrayOf<T>(itemValidator: Validator<T>, message = "must be an array"): Validator<unknown> {
+  return (value, ctx) => {
+    if (!Array.isArray(value)) {
+      ctx.addIssue(message);
+      return;
+    }
+    array(itemValidator)(value, ctx);
+  };
+}
+
+/**
+ * Validates every value of a plain object keyed by arbitrary strings (a dictionary/map), unlike
+ * `object`, which validates a fixed, known set of keys. For a value of unknown shape (untrusted
+ * input), reports `message` and skips item validation if it isn't a plain object.
+ */
+export function record<T>(valueValidator: Validator<T>, message = "must be an object"): Validator<unknown> {
+  return (value, ctx) => {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
+      ctx.addIssue(message);
+      return;
+    }
+    for (const [key, item] of Object.entries(value)) {
+      valueValidator(item as T, ctx.at(key));
     }
   };
 }
