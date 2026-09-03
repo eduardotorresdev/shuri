@@ -16,15 +16,19 @@ src/
 
 ## What each part does
 
-- **server.ts** — calls `@shuri/sdk`'s `create({ collections, globals, adapter })`, seeds one author
-  and one post plus the `site` global on startup, then calls `serve(app.handler, port)`. Logs the
-  collections/globals/OpenAPI/docs URLs.
+- **server.ts** — calls `@shuri/sdk`'s `create({ collections, globals, adapter })`, subscribes to the
+  `posts` collection (before the seed, so booting already exercises it), seeds one author and one
+  post plus the `site` global, then calls `serve(app.handler, port)`. Logs the collections/globals/
+  OpenAPI/docs URLs plus a copy-pasteable `curl -N` for the event stream.
 - **collections.ts** / **globals.ts** — plain `CollectionSchema[]`/`GlobalSchema[]` literals (`as
-  const satisfies`) showing the field types available (`text`, `textarea`, `email`, `boolean`).
+const satisfies`) showing the field types available (`text`, `textarea`, `email`, `boolean`).
 - **node-http-adapter.ts** — `@shuri/sdk`'s `app.handler` is a web-standard `fetch` handler; Node's
   callback-style `http` module needs an adapter to speak that interface. `serve()` is that small
-  adapter: buffers the incoming request into a `Request`, then writes the resulting `Response` back
-  onto the `ServerResponse`. Deno/Bun already speak the `fetch` interface natively.
+  adapter: buffers the incoming request into a `Request`, then **streams** the resulting `Response`
+  body onto the `ServerResponse` (headers flushed first, `pipeline` handling backpressure). Buffering
+  the body instead would hang forever on an event stream, which never ends. It also wires the
+  client's disconnect (`res`'s "close") to the `Request`'s `AbortSignal`, which Deno/Bun/Workers
+  provide natively and Node does not — without it a stream would never learn its client is gone.
 
 ## Role in the monorepo
 

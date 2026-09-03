@@ -15,7 +15,7 @@ prettierrc.base.json          base prettier config
 
 - **tsconfig.base.json** — strict TS config every package's own `tsconfig.json`/`tsconfig.build.json`
   extends: `target: ES2022`, `module`/`moduleResolution: NodeNext`, `strict: true`, `declaration:
-  true`.
+true`.
 - **oxlintrc.base.json** — the base rule set every package's own `.oxlintrc.json` extends.
 - **prettierrc.base.json** — the shared formatting config.
 

@@ -39,8 +39,8 @@ src/
   existing collection slug. Used by both `collections/schema.ts` and `globals/schema.ts`.
 - **collections/fields.ts** — the `Field` union and its subtypes; the field-type vocabulary of the
   whole CMS (`text`, `textarea`, `email`, `select`, `number`, `boolean`, `relation`).
-- **collections/schema.ts** / **globals/schema.ts** — validate the *shape of the declared schema
-  itself* (unique slugs, required schema fields, well-formed fields); records are validated
+- **collections/schema.ts** / **globals/schema.ts** — validate the _shape of the declared schema
+  itself_ (unique slugs, required schema fields, well-formed fields); records are validated
   separately, by `collections/validate-record.ts`.
 - **collections/validate-record.ts** — the other side: validates a **record** (`{title: "..."}`)
   against the already-declared, already-valid `fields` of a schema; supports `{ partial: true }` for
@@ -52,8 +52,8 @@ src/
 - **collections/infer.ts** / **globals/infer.ts** — map declared `fields` to the TS shape of the
   record (`InferCollection<C>`, `InferGlobal<G>`), with no manual types needed anywhere.
 - **errors.ts** (in both) — `CollectionSchemaError`/`GlobalSchemaError`, thrown by `define*` to
-  report a malformed *schema*; `RecordValidationError` (in `@shuri/store`) reports the other case, a
-  *record* that conflicts with an already-valid schema.
+  report a malformed _schema_; `RecordValidationError` (in `@shuri/store`) reports the other case, a
+  _record_ that conflicts with an already-valid schema.
 
 ## Role in the monorepo
 

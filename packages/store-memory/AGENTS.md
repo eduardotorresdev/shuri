@@ -15,7 +15,7 @@ src/
 ## What each part does
 
 - **memory-adapter.ts** — `createMemoryAdapter()` keeps each collection in a `Map<RecordId,
-  StoreRecord>` (one table per slug) and globals in a single `Map<slug, RecordInput>`. Implements the
+StoreRecord>` (one table per slug) and globals in a single `Map<slug, RecordInput>`. Implements the
   `@shuri/store` `Query` AST by hand: `matchesFilter`/`matchesWhere` filter, `sortRecords`/`compare`
   sort (compares `number`/`string`/`boolean`; mismatched types tie), `applyQuery` chains filter ->
   sort -> offset -> limit. `insert` generates the `id` via `randomUUID()`; `update` does a shallow

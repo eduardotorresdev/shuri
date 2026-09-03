@@ -17,15 +17,20 @@ src/
 
 ## What each part does
 
-- **create.ts** — `create({ collections, globals, adapter, api?, globalsApi?, openapi? })`:
+- **create.ts** — `create({ collections, globals, adapter, api?, globalsApi?, realtime?, openapi? })`:
   1. Calls `createCore` (`@shuri/core`) to validate the declared schema.
   2. Calls `createStore` (`@shuri/store`) to bind that `Core` to `adapter`.
   3. Builds `app.collections`/`app.globals`: one typed `CollectionStore`/`GlobalStore` per declared
      slug, so `app.collections.posts.insert(...)` and `app.globals.site.get()` are typed from the
      schema with no manual typing.
-  4. Builds `app.handler` by chaining `createOpenApiHandler` -> `createGlobalsApiHandler` ->
-     `createApiHandler` (`@shuri/api`), each falling through (`undefined`) to the next until one
-     handles the request.
+  4. Builds `app.handler` by calling `createHandler` (`@shuri/api`), which composes the collections,
+     globals, event stream and OpenAPI handlers — the ordering and the base-path forwarding live
+     there, so this package only forwards the per-handler options it was given.
+
+`app.collections.<slug>.subscribe(...)`/`app.globals.<slug>.subscribe(...)` and the `/events` route
+are two views of one `store.events` bus: a write through the SDK shows up on the HTTP stream and vice
+versa. The bus itself stays off `ShuriApp`, like `core`/`store` — the public surface is the per-slug
+`subscribe` and the route.
 
 ## Role in the monorepo
 
