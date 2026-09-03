@@ -1,9 +1,12 @@
+import { createApiHandler, type CreateApiHandlerOptions } from "@shuri/api";
 import { createCore, type CollectionSchema, type Core, type InferCollection } from "@shuri/core";
 import { createStore, type CollectionStore, type Store, type StoreAdapter } from "@shuri/store";
 
 export interface CreateConfig<T extends readonly CollectionSchema[]> {
   collections: T;
   adapter: StoreAdapter;
+  /** Options for the HTTP handler exposed as `app.handler`. See `@shuri/api`'s `createApiHandler`. */
+  api?: CreateApiHandlerOptions;
 }
 
 /** One `CollectionStore` per declared slug, so `app.collections.posts.insert(...)` is typed per that collection's fields. */
@@ -12,14 +15,21 @@ type AppCollections<T extends readonly CollectionSchema[]> = {
 };
 
 /**
- * Facade tying a collections schema to a persistence adapter. Exposes one property per collection
- * slug under `collections` (`app.collections.posts.insert(...)`), plus `core` and `store` for
- * lower-level/dynamic access.
+ * Facade tying a collections schema to a persistence adapter - the single source of truth for both
+ * programmatic access (`collections`/`core`/`store`) and HTTP access (`handler`). Exposes one
+ * property per collection slug under `collections` (`app.collections.posts.insert(...)`), `core`
+ * and `store` for lower-level/dynamic access, and `handler` to serve every collection over HTTP:
+ *
+ *   const app = create({ collections, adapter });
+ *   Deno.serve(app.handler);
+ *   // or: Bun.serve({ fetch: app.handler });
+ *   // or, mounted in Hono: honoApp.all("/collections/*", (c) => app.handler(c.req.raw));
  */
 export interface ShuriApp<T extends readonly CollectionSchema[] = CollectionSchema[]> {
   collections: AppCollections<T>;
   core: Core<T>;
   store: Store<T>;
+  handler: (request: Request) => Promise<Response>;
 }
 
 /** Resolves one `CollectionStore` per declared slug, e.g. `collections.posts`. */
@@ -39,5 +49,10 @@ export function create<const T extends readonly CollectionSchema[]>(config: Crea
   const core = createCore({ collections: config.collections });
   const store = createStore(core, config.adapter);
 
-  return { core, store, collections: buildCollections(core, store) };
+  return {
+    core,
+    store,
+    collections: buildCollections(core, store),
+    handler: createApiHandler({ store }, config.api),
+  };
 }

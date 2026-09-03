@@ -17,12 +17,14 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@shuri/api": "workspace:*",
     "@shuri/core": "workspace:*",
     "@shuri/store": "workspace:*"
   },
   "devDependencies": {
     "@shuri/config": "workspace:*",
     "@shuri/store-memory": "workspace:*",
+    "@types/node": "^22.13.1",
     "vitest": "^3.2.4"
   }
 }
