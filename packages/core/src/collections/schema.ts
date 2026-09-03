@@ -88,7 +88,11 @@ function collectionValidator(slugs: Set<string>): Validator<CollectionSchema> {
   });
 }
 
-/** Validates the shape of a collections schema, not the records it describes. */
+/**
+ * Validates the shape of a collections schema, not the records it describes.
+ * @param collections - The declared collections to validate.
+ * @param ctx - The validation context issues are reported to.
+ */
 export const collectionsValidator: Validator<CollectionSchema[]> = (collections, ctx) => {
   const slugs = new Set(collections.map((collection) => collection.slug));
 

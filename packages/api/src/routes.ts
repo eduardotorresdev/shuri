@@ -7,6 +7,9 @@ export interface CollectionRoute {
 /**
  * Matches `{basePath}/:slug` and `{basePath}/:slug/:id` against `pathname`. Returns `undefined` for
  * anything outside `basePath` or with extra path segments.
+ * @param pathname - The request URL's pathname.
+ * @param basePath - The path prefix collection routes are mounted under.
+ * @returns The matched route, or `undefined` if `pathname` doesn't match.
  */
 export function matchCollectionRoute(pathname: string, basePath: string): CollectionRoute | undefined {
   if (!pathname.startsWith(basePath)) return undefined;

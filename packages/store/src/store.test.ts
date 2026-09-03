@@ -17,7 +17,10 @@ const services: CollectionSchema = {
   ],
 };
 
-/** Minimal `StoreAdapter` test double, just enough to exercise the `Store` facade. */
+/**
+ * Minimal `StoreAdapter` test double, just enough to exercise the `Store` facade.
+ * @returns An in-memory `StoreAdapter` test double.
+ */
 function createFakeAdapter(): StoreAdapter {
   const records = new Map<RecordId, StoreRecord>();
   let nextId = 1;

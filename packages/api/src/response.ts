@@ -23,6 +23,8 @@ export function noContentResponse(): Response {
  * Maps an error caught while handling a request to an HTTP `Response`. Errors this package
  * doesn't recognize are rethrown so they surface as a 500 (or crash) at the hosting engine's
  * own error boundary, instead of being silently swallowed here.
+ * @param error - The error caught while handling a request.
+ * @returns The HTTP `Response` mapped from `error`.
  */
 export function toErrorResponse(error: unknown): Response {
   if (error instanceof InvalidQueryError) return errorResponse(error.status, error.message, { issues: error.issues });

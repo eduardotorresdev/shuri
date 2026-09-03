@@ -69,6 +69,8 @@ function parseNumberParam(searchParams: URLSearchParams, param: string): number 
  * `where`, `orderBy` as JSON-encoded strings), validated against its shape via `@shuri/validate`
  * the same way `@shuri/core` validates collection records - schema first, no hand-rolled checks.
  * Throws `InvalidQueryError` for anything malformed, so a bad query never reaches the adapter.
+ * @param searchParams - The request URL's search params.
+ * @returns The parsed and validated `Query` AST.
  */
 export function parseQuery(searchParams: URLSearchParams): Query {
   const raw: RawQuery = {

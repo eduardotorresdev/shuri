@@ -55,7 +55,11 @@ export function createFakeCollectionStore(): CollectionStore<RecordInput> {
   };
 }
 
-/** Fake `{ store }` exposing a single "services" collection, for handler-level unit tests. */
+/**
+ * Fake `{ store }` exposing a single "services" collection, for handler-level unit tests.
+ * @param [collection] - The collection store returned for the "services" slug.
+ * @returns A fake `{ store }` exposing `collection` under the "services" slug.
+ */
 export function createFakeApp(collection: CollectionStore<RecordInput> = createFakeCollectionStore()): { store: Store } {
   const store = {
     collection: (slug: string) => {

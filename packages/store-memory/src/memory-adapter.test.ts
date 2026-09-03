@@ -68,7 +68,7 @@ describe("createMemoryAdapter", () => {
 
     it("filters using where operators", async () => {
       const affordable = await adapter.findMany(services, { where: { price: { op: "lte", value: 50 } } });
-      expect(affordable.map((r) => r.name).sort()).toEqual(["Haircut", "Manicure"]);
+      expect(affordable.map((r) => r.name).toSorted()).toEqual(["Haircut", "Manicure"]);
 
       const exact = await adapter.findMany(services, { where: { name: { op: "eq", value: "Massage" } } });
       expect(exact.map((r) => r.name)).toEqual(["Massage"]);
@@ -76,7 +76,7 @@ describe("createMemoryAdapter", () => {
       const inList = await adapter.findMany(services, {
         where: { name: { op: "in", value: ["Haircut", "Massage"] } },
       });
-      expect(inList.map((r) => r.name).sort()).toEqual(["Haircut", "Massage"]);
+      expect(inList.map((r) => r.name).toSorted()).toEqual(["Haircut", "Massage"]);
     });
 
     it("sorts by a field and direction", async () => {

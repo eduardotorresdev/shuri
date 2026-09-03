@@ -47,7 +47,12 @@ function bindCollection(collection: CollectionSchema, adapter: StoreAdapter): Co
   };
 }
 
-/** Wires every collection declared on `core` to `adapter`, resolving one `CollectionStore` per slug. */
+/**
+ * Wires every collection declared on `core` to `adapter`, resolving one `CollectionStore` per slug.
+ * @param core - The core holding the declared collection schemas.
+ * @param adapter - The persistence adapter backing every collection.
+ * @returns A `Store` exposing one `CollectionStore` per declared slug.
+ */
 export function createStore<T extends readonly CollectionSchema[]>(core: Core<T>, adapter: StoreAdapter): Store<T> {
   const collections = new Map<string, CollectionStore>();
 

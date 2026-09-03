@@ -14,7 +14,11 @@ export interface RecordValidatorOptions {
   partial?: boolean;
 }
 
-/** Validates a single field's value against its own type/format/range constraints, once present. */
+/**
+ * Validates a single field's value against its own type/format/range constraints, once present.
+ * @param field - The declared field whose constraints validate the value.
+ * @returns A validator that checks a value against `field`'s constraints.
+ */
 function valueValidator(field: Field): Validator<unknown> {
   return (value, ctx) => {
     switch (field.type) {
@@ -69,7 +73,12 @@ function valueValidator(field: Field): Validator<unknown> {
   };
 }
 
-/** Validates one declared field: required check (unless `partial`), then its value once present. */
+/**
+ * Validates one declared field: required check (unless `partial`), then its value once present.
+ * @param field - The declared field to validate.
+ * @param options - Validation options, e.g. `{ partial: true }` for updates.
+ * @returns A validator that runs the required check (unless `partial`) then the value check.
+ */
 function fieldValidator(field: Field, options: RecordValidatorOptions): Validator<unknown> {
   const validators: Validator<unknown>[] = [];
   if (field.required && !options.partial) validators.push(required(`"${field.name}" is required`));
@@ -80,7 +89,12 @@ function fieldValidator(field: Field, options: RecordValidatorOptions): Validato
   return all(...validators);
 }
 
-/** Validates a record's field values against a collection's declared `fields`. */
+/**
+ * Validates a record's field values against a collection's declared `fields`.
+ * @param collection - The collection whose declared fields validate the record.
+ * @param [options] - Validation options, e.g. `{ partial: true }` for updates.
+ * @returns A validator for records of `collection`.
+ */
 export function recordValidator(collection: CollectionSchema, options: RecordValidatorOptions = {}): Validator<RecordInput> {
   const fields: Record<string, Validator<unknown>> = {};
   for (const field of collection.fields) fields[field.name] = fieldValidator(field, options);

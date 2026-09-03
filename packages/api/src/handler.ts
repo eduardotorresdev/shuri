@@ -37,6 +37,9 @@ export interface CreateApiHandlerOptions {
  * every write against the collection's declared fields (so does `@shuri/sdk`, since both go
  * through the same `CollectionStore`), throwing `RecordValidationError` on a bad body. This
  * handler's job is only to translate that (via `response.ts#toErrorResponse`) into a 400 response.
+ * @param app - The `{ store }` exposing every collection to serve.
+ * @param [options] - Options controlling the handler, e.g. `basePath`.
+ * @returns A framework-agnostic HTTP handler serving `app`'s collections.
  */
 export function createApiHandler<T extends readonly CollectionSchema[]>(
   app: ApiApp<T>,

@@ -15,7 +15,11 @@ export function assertValid<T>(value: T, validator: Validator<T>, rootPath = "")
   }
 }
 
-/** Reports an issue when `value` is `undefined`, `null` or an empty string. */
+/**
+ * Reports an issue when `value` is `undefined`, `null` or an empty string.
+ * @param [message] - The issue message reported when the value is missing.
+ * @returns A validator that fails when the value is missing.
+ */
 export function required(message = '"value" is required'): Validator<unknown> {
   return (value, ctx) => {
     if (value === undefined || value === null || value === "") {
@@ -32,14 +36,23 @@ export function refine<T>(check: (value: T) => boolean, message: string | ((valu
   };
 }
 
-/** Skips `validator` when the value is `undefined`, so callers don't have to guard optional fields by hand. */
+/**
+ * Skips `validator` when the value is `undefined`, so callers don't have to guard optional fields by hand.
+ * @param validator - The validator to run once the value is present.
+ * @returns A validator that skips `validator` for `undefined` values.
+ */
 export function optional<T>(validator: Validator<T>): Validator<T | undefined> {
   return (value, ctx) => {
     if (value !== undefined) validator(value, ctx);
   };
 }
 
-/** Reports an issue when the value isn't one of `allowed` (by `===`). */
+/**
+ * Reports an issue when the value isn't one of `allowed` (by `===`).
+ * @param allowed - The set of values the input must be one of.
+ * @param [message] - The issue message, or a function producing one from the value.
+ * @returns A validator that fails when the value isn't in `allowed`.
+ */
 export function oneOf<T>(allowed: readonly T[], message?: string | ((value: T) => string)): Validator<T> {
   return (value, ctx) => {
     if (!allowed.includes(value)) {
@@ -49,14 +62,22 @@ export function oneOf<T>(allowed: readonly T[], message?: string | ((value: T) =
   };
 }
 
-/** Runs every validator against the same value and context, collecting all of their issues. */
+/**
+ * Runs every validator against the same value and context, collecting all of their issues.
+ * @param validators - The validators to run, in order, against the same value.
+ * @returns A validator that runs all of `validators`.
+ */
 export function all<T>(...validators: Validator<T>[]): Validator<T> {
   return (value, ctx) => {
     for (const validator of validators) validator(value, ctx);
   };
 }
 
-/** Validates each declared field of an object at its own path segment. */
+/**
+ * Validates each declared field of an object at its own path segment.
+ * @param fields - The validator for each declared field, keyed by field name.
+ * @returns A validator that runs each field's validator at its own path segment.
+ */
 export function object<T extends object>(fields: { [K in keyof T]?: Validator<T[K]> }): Validator<T> {
   return (value, ctx) => {
     for (const key of Object.keys(fields) as (keyof T)[]) {
@@ -69,6 +90,9 @@ export function object<T extends object>(fields: { [K in keyof T]?: Validator<T[
 /**
  * Like `array`, but for a value of unknown shape (untrusted input: parsed JSON, a query param, ...)
  * instead of one already known to be an array. Reports `message` and skips item validation if it isn't.
+ * @param itemValidator - The validator run against each item, once the value is confirmed to be an array.
+ * @param [message] - The issue message reported when the value isn't an array.
+ * @returns A validator that fails when the value isn't an array, else delegates to `array`.
  */
 export function arrayOf<T>(itemValidator: Validator<T>, message = "must be an array"): Validator<unknown> {
   return (value, ctx) => {
@@ -84,6 +108,9 @@ export function arrayOf<T>(itemValidator: Validator<T>, message = "must be an ar
  * Validates every value of a plain object keyed by arbitrary strings (a dictionary/map), unlike
  * `object`, which validates a fixed, known set of keys. For a value of unknown shape (untrusted
  * input), reports `message` and skips item validation if it isn't a plain object.
+ * @param valueValidator - The validator run against each value of the object.
+ * @param [message] - The issue message reported when the value isn't a plain object.
+ * @returns A validator that fails when the value isn't a plain object, else validates each entry.
  */
 export function record<T>(valueValidator: Validator<T>, message = "must be an object"): Validator<unknown> {
   return (value, ctx) => {
@@ -97,14 +124,22 @@ export function record<T>(valueValidator: Validator<T>, message = "must be an ob
   };
 }
 
-/** Reports an issue when the array has no items. */
+/**
+ * Reports an issue when the array has no items.
+ * @param [message] - The issue message reported when the array is empty.
+ * @returns A validator that fails when the array has no items.
+ */
 export function nonEmpty(message = "must not be empty"): Validator<unknown[]> {
   return (values, ctx) => {
     if (values.length === 0) ctx.addIssue(message);
   };
 }
 
-/** Validates each item of an array at a numeric path segment. */
+/**
+ * Validates each item of an array at a numeric path segment.
+ * @param itemValidator - The validator run against each item.
+ * @returns A validator that runs `itemValidator` against each item, at its index.
+ */
 export function array<T>(itemValidator: Validator<T>): Validator<T[]> {
   return (values, ctx) => {
     values.forEach((item, index) => itemValidator(item, ctx.at(index)));
@@ -122,7 +157,13 @@ export interface KeyedArrayOptions<T> {
   duplicateMessage?: (key: string, item: T) => string;
 }
 
-/** Like `array`, but paths items by a caller-provided key instead of their index. */
+/**
+ * Like `array`, but paths items by a caller-provided key instead of their index.
+ * @param keyOf - Derives the path key for an item.
+ * @param itemValidator - The validator run against each item.
+ * @param [options] - Options controlling duplicate-key detection and reporting.
+ * @returns A validator that runs `itemValidator` against each item, at its derived key.
+ */
 export function keyedArray<T>(
   keyOf: (item: T, index: number) => string,
   itemValidator: Validator<T>,
@@ -146,7 +187,12 @@ export function keyedArray<T>(
   };
 }
 
-/** Reports an issue at the collection's own path for every item sharing a key. */
+/**
+ * Reports an issue at the collection's own path for every item sharing a key.
+ * @param keyOf - Derives the dedupe key for an item; `undefined` exempts it.
+ * @param message - Produces the issue message reported for a duplicate key.
+ * @returns A validator that fails once per item after the first sharing a key.
+ */
 export function unique<T>(keyOf: (item: T) => string | undefined, message: (key: string) => string): Validator<T[]> {
   return (values, ctx) => {
     const seen = new Set<string>();

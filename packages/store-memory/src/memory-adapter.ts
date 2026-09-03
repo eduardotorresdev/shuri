@@ -11,7 +11,12 @@ import {
   type Where,
 } from "@shuri/store";
 
-/** Orders two values of the same primitive type; unordered/mismatched types compare as equal. */
+/**
+ * Orders two values of the same primitive type; unordered/mismatched types compare as equal.
+ * @param a - The first value to compare.
+ * @param b - The second value to compare.
+ * @returns A negative number if `a` sorts before `b`, positive if after, zero if equal.
+ */
 function compare(a: unknown, b: unknown): number {
   if (typeof a === "number" && typeof b === "number") return a - b;
   if (typeof a === "string" && typeof b === "string") return a.localeCompare(b);
@@ -45,7 +50,7 @@ function matchesWhere(record: StoreRecord, where: Where): boolean {
 }
 
 function sortRecords(records: StoreRecord[], orderBy: OrderBy[]): StoreRecord[] {
-  return [...records].sort((a, b) => {
+  return records.toSorted((a, b) => {
     for (const { field, direction = "asc" } of orderBy) {
       const result = compare(a[field], b[field]);
       if (result !== 0) return direction === "asc" ? result : -result;
@@ -55,14 +60,17 @@ function sortRecords(records: StoreRecord[], orderBy: OrderBy[]): StoreRecord[] 
 }
 
 function applyQuery(records: StoreRecord[], query?: Query): StoreRecord[] {
-  let result = query?.where ? records.filter((record) => matchesWhere(record, query.where!)) : records;
+  const where = query?.where;
+  let result = where ? records.filter((record) => matchesWhere(record, where)) : records;
   if (query?.orderBy) result = sortRecords(result, query.orderBy);
   if (query?.offset) result = result.slice(query.offset);
   if (query?.limit !== undefined) result = result.slice(0, query.limit);
   return result;
 }
 
-/** In-memory `StoreAdapter`, useful for tests and for development before a real database is wired up. */
+/** In-memory `StoreAdapter`, useful for tests and for development before a real database is wired up.
+ * @returns A `StoreAdapter` backed by in-memory tables keyed by collection slug.
+ */
 export function createMemoryAdapter(): StoreAdapter {
   const tables = new Map<string, Map<RecordId, StoreRecord>>();
 
