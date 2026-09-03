@@ -28,7 +28,10 @@ export function required(message = '"value" is required'): Validator<unknown> {
   };
 }
 
-export function refine<T>(check: (value: T) => boolean, message: string | ((value: T) => string)): Validator<T> {
+export function refine<T>(
+  check: (value: T) => boolean,
+  message: string | ((value: T) => string),
+): Validator<T> {
   return (value, ctx) => {
     if (!check(value)) {
       ctx.addIssue(typeof message === "function" ? message(value) : message);
@@ -53,11 +56,16 @@ export function optional<T>(validator: Validator<T>): Validator<T | undefined> {
  * @param [message] - The issue message, or a function producing one from the value.
  * @returns A validator that fails when the value isn't in `allowed`.
  */
-export function oneOf<T>(allowed: readonly T[], message?: string | ((value: T) => string)): Validator<T> {
+export function oneOf<T>(
+  allowed: readonly T[],
+  message?: string | ((value: T) => string),
+): Validator<T> {
   return (value, ctx) => {
     if (!allowed.includes(value)) {
       const fallback = `must be one of ${allowed.join(", ")}`;
-      ctx.addIssue(typeof message === "function" ? message(value) : (message ?? fallback));
+      ctx.addIssue(
+        typeof message === "function" ? message(value) : (message ?? fallback),
+      );
     }
   };
 }
@@ -78,7 +86,9 @@ export function all<T>(...validators: Validator<T>[]): Validator<T> {
  * @param fields - The validator for each declared field, keyed by field name.
  * @returns A validator that runs each field's validator at its own path segment.
  */
-export function object<T extends object>(fields: { [K in keyof T]?: Validator<T[K]> }): Validator<T> {
+export function object<T extends object>(fields: {
+  [K in keyof T]?: Validator<T[K]>;
+}): Validator<T> {
   return (value, ctx) => {
     for (const key of Object.keys(fields) as (keyof T)[]) {
       const fieldValidator = fields[key];
@@ -94,7 +104,10 @@ export function object<T extends object>(fields: { [K in keyof T]?: Validator<T[
  * @param [message] - The issue message reported when the value isn't an array.
  * @returns A validator that fails when the value isn't an array, else delegates to `array`.
  */
-export function arrayOf<T>(itemValidator: Validator<T>, message = "must be an array"): Validator<unknown> {
+export function arrayOf<T>(
+  itemValidator: Validator<T>,
+  message = "must be an array",
+): Validator<unknown> {
   return (value, ctx) => {
     if (!Array.isArray(value)) {
       ctx.addIssue(message);
@@ -112,7 +125,10 @@ export function arrayOf<T>(itemValidator: Validator<T>, message = "must be an ar
  * @param [message] - The issue message reported when the value isn't a plain object.
  * @returns A validator that fails when the value isn't a plain object, else validates each entry.
  */
-export function record<T>(valueValidator: Validator<T>, message = "must be an object"): Validator<unknown> {
+export function record<T>(
+  valueValidator: Validator<T>,
+  message = "must be an object",
+): Validator<unknown> {
   return (value, ctx) => {
     if (typeof value !== "object" || value === null || Array.isArray(value)) {
       ctx.addIssue(message);
@@ -193,7 +209,10 @@ export function keyedArray<T>(
  * @param message - Produces the issue message reported for a duplicate key.
  * @returns A validator that fails once per item after the first sharing a key.
  */
-export function unique<T>(keyOf: (item: T) => string | undefined, message: (key: string) => string): Validator<T[]> {
+export function unique<T>(
+  keyOf: (item: T) => string | undefined,
+  message: (key: string) => string,
+): Validator<T[]> {
   return (values, ctx) => {
     const seen = new Set<string>();
     for (const item of values) {

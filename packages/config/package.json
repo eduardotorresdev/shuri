@@ -4,6 +4,7 @@
   "private": true,
   "files": [
     "tsconfig.base.json",
-    "oxlintrc.base.json"
+    "oxlintrc.base.json",
+    "prettierrc.base.json"
   ]
 }

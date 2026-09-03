@@ -29,6 +29,8 @@
     "jsdoc/require-returns-type": "off",
     "jsdoc/require-throws-description": "error",
 
+    "max-lines": ["error", 300],
+
     "eqeqeq": "error",
     "no-var": "error",
     "no-console": "warn",

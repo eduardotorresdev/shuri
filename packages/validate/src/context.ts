@@ -1,6 +1,9 @@
 import type { Issue, ValidationContext } from "./types.js";
 
-export function createContext(rootPath: string): { context: ValidationContext; issues: Issue[] } {
+export function createContext(rootPath: string): {
+  context: ValidationContext;
+  issues: Issue[];
+} {
   const issues: Issue[] = [];
 
   function build(path: string): ValidationContext {

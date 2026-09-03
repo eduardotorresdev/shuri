@@ -9,7 +9,10 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
  * @param port - The port to listen on.
  * @returns Nothing; the server runs until the process exits.
  */
-export function serve(handler: (request: Request) => Promise<Response>, port: number): void {
+export function serve(
+  handler: (request: Request) => Promise<Response>,
+  port: number,
+): void {
   createServer((req, res) => {
     toWebRequest(req)
       .then(handler)
@@ -25,11 +28,16 @@ async function toWebRequest(req: IncomingMessage): Promise<Request> {
   const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
   const headers = new Headers();
   for (const [key, value] of Object.entries(req.headers)) {
-    if (value !== undefined) headers.set(key, Array.isArray(value) ? value.join(", ") : value);
+    if (value !== undefined)
+      headers.set(key, Array.isArray(value) ? value.join(", ") : value);
   }
 
   const hasBody = req.method !== "GET" && req.method !== "HEAD";
-  return new Request(url, { method: req.method, headers, body: hasBody ? await readBody(req) : undefined });
+  return new Request(url, {
+    method: req.method,
+    headers,
+    body: hasBody ? await readBody(req) : undefined,
+  });
 }
 
 async function readBody(req: IncomingMessage): Promise<Buffer | undefined> {

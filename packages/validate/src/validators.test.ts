@@ -23,7 +23,9 @@ describe("validate", () => {
   });
 
   it("collects issues with the path built up via ctx.at", () => {
-    const person = object<{ name: string }>({ name: required('"name" is required') });
+    const person = object<{ name: string }>({
+      name: required('"name" is required'),
+    });
     const issues = validate({ name: "" }, person, "person");
     expect(issues).toEqual([{ path: "person.name", message: '"name" is required' }]);
   });
@@ -43,13 +45,20 @@ describe("required", () => {
 describe("refine", () => {
   it("adds a static message when the check fails", () => {
     const positive = refine<number>((value) => value > 0, "must be positive");
-    expect(validate(-1, positive, "amount")).toEqual([{ path: "amount", message: "must be positive" }]);
+    expect(validate(-1, positive, "amount")).toEqual([
+      { path: "amount", message: "must be positive" },
+    ]);
     expect(validate(1, positive, "amount")).toEqual([]);
   });
 
   it("supports a message derived from the value", () => {
-    const positive = refine<number>((value) => value > 0, (value) => `${value} must be positive`);
-    expect(validate(-1, positive, "amount")).toEqual([{ path: "amount", message: "-1 must be positive" }]);
+    const positive = refine<number>(
+      (value) => value > 0,
+      (value) => `${value} must be positive`,
+    );
+    expect(validate(-1, positive, "amount")).toEqual([
+      { path: "amount", message: "-1 must be positive" },
+    ]);
   });
 });
 
@@ -83,7 +92,9 @@ describe("oneOf", () => {
 
 describe("arrayOf", () => {
   it("validates each item once confirmed to be an array", () => {
-    const items = arrayOf<{ name: string }>(object({ name: required('"name" is required') }));
+    const items = arrayOf<{ name: string }>(
+      object({ name: required('"name" is required') }),
+    );
     expect(validate([{ name: "ok" }, { name: "" }], items, "items")).toEqual([
       { path: "items.1.name", message: '"name" is required' },
     ]);
@@ -99,12 +110,18 @@ describe("arrayOf", () => {
 describe("record", () => {
   it("validates every value at its own key", () => {
     const filters = record<number>(refine((value) => value > 0, "must be positive"));
-    expect(validate({ a: 1, b: -1 }, filters, "where")).toEqual([{ path: "where.b", message: "must be positive" }]);
+    expect(validate({ a: 1, b: -1 }, filters, "where")).toEqual([
+      { path: "where.b", message: "must be positive" },
+    ]);
   });
 
   it("flags a non-object value instead of throwing", () => {
-    expect(validate([1, 2], record(required()), "where")).toEqual([{ path: "where", message: "must be an object" }]);
-    expect(validate("nope", record(required()), "where")).toEqual([{ path: "where", message: "must be an object" }]);
+    expect(validate([1, 2], record(required()), "where")).toEqual([
+      { path: "where", message: "must be an object" },
+    ]);
+    expect(validate("nope", record(required()), "where")).toEqual([
+      { path: "where", message: "must be an object" },
+    ]);
   });
 });
 
@@ -138,14 +155,20 @@ describe("array / keyedArray", () => {
       object({ name: required('"name" is required') }),
     );
     const issues = validate([{ name: "" }], items, "items");
-    expect(issues).toEqual([{ path: "items.(missing name).name", message: '"name" is required' }]);
+    expect(issues).toEqual([
+      { path: "items.(missing name).name", message: '"name" is required' },
+    ]);
   });
 
   it("flags duplicate keys at the duplicate item's own path", () => {
     const items = keyedArray<Item>((item) => item.name, object({}), {
       duplicateMessage: (key) => `duplicate name "${key}"`,
     });
-    const issues = validate([{ name: "a" }, { name: "a" }, { name: "b" }], items, "items");
+    const issues = validate(
+      [{ name: "a" }, { name: "a" }, { name: "b" }],
+      items,
+      "items",
+    );
     expect(issues).toEqual([{ path: "items.a", message: 'duplicate name "a"' }]);
   });
 });
@@ -168,7 +191,11 @@ describe("unique", () => {
       (item) => item.slug,
       (key) => `duplicate slug "${key}"`,
     );
-    const issues = validate([{ slug: "a" }, { slug: "a" }, { slug: "b" }], distinctSlugs, "items");
+    const issues = validate(
+      [{ slug: "a" }, { slug: "a" }, { slug: "b" }],
+      distinctSlugs,
+      "items",
+    );
     expect(issues).toEqual([{ path: "items", message: 'duplicate slug "a"' }]);
   });
 });
@@ -179,7 +206,9 @@ describe("assertValid", () => {
   });
 
   it("throws a ValidationError carrying every issue", () => {
-    const items = array<{ name: string }>(object({ name: required('"name" is required') }));
+    const items = array<{ name: string }>(
+      object({ name: required('"name" is required') }),
+    );
     expect(() => assertValid([{ name: "" }], items, "items")).toThrow(ValidationError);
   });
 });
