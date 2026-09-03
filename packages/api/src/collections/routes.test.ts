@@ -3,7 +3,9 @@ import { matchCollectionRoute } from "./routes.js";
 
 describe("matchCollectionRoute", () => {
   it("matches a collection-only path", () => {
-    expect(matchCollectionRoute("/collections/services", "/collections")).toEqual({ slug: "services" });
+    expect(matchCollectionRoute("/collections/services", "/collections")).toEqual({
+      slug: "services",
+    });
   });
 
   it("matches a collection path with a record id", () => {
@@ -14,7 +16,9 @@ describe("matchCollectionRoute", () => {
   });
 
   it("ignores a trailing slash", () => {
-    expect(matchCollectionRoute("/collections/services/", "/collections")).toEqual({ slug: "services" });
+    expect(matchCollectionRoute("/collections/services/", "/collections")).toEqual({
+      slug: "services",
+    });
   });
 
   it("returns undefined outside basePath", () => {
@@ -27,10 +31,14 @@ describe("matchCollectionRoute", () => {
   });
 
   it("returns undefined for extra path segments", () => {
-    expect(matchCollectionRoute("/collections/services/abc/extra", "/collections")).toBeUndefined();
+    expect(
+      matchCollectionRoute("/collections/services/abc/extra", "/collections"),
+    ).toBeUndefined();
   });
 
   it("respects a custom basePath", () => {
-    expect(matchCollectionRoute("/api/services", "/api")).toEqual({ slug: "services" });
+    expect(matchCollectionRoute("/api/services", "/api")).toEqual({
+      slug: "services",
+    });
   });
 });

@@ -1,9 +1,16 @@
-import type { CollectionSchema, Core } from "@shuri/core";
-import { buildOpenApiDocument, type BuildOpenApiDocumentOptions, type OpenApiDocument } from "./openapi.js";
+import type { CollectionSchema, Core, GlobalSchema } from "@shuri/core";
+import {
+  buildOpenApiDocument,
+  type BuildOpenApiDocumentOptions,
+  type OpenApiDocument,
+} from "./openapi.js";
 
-/** Minimal shape `createOpenApiHandler` needs — just enough to enumerate every declared collection. */
-export interface OpenApiApp<T extends readonly CollectionSchema[] = CollectionSchema[]> {
-  core: Core<T>;
+/** Minimal shape `createOpenApiHandler` needs — just enough to enumerate every declared collection/global. */
+export interface OpenApiApp<
+  T extends readonly CollectionSchema[] = CollectionSchema[],
+  G extends readonly GlobalSchema[] = GlobalSchema[],
+> {
+  core: Core<T, G>;
 }
 
 export interface CreateOpenApiHandlerOptions extends BuildOpenApiDocumentOptions {
@@ -39,8 +46,11 @@ function docsHtml(specPath: string, title: string): string {
  * @param [options] - Options controlling the handler, e.g. `specPath`/`docsPath`/`title`.
  * @returns A handler serving the OpenAPI document and docs page, `undefined` otherwise.
  */
-export function createOpenApiHandler<T extends readonly CollectionSchema[]>(
-  app: OpenApiApp<T>,
+export function createOpenApiHandler<
+  T extends readonly CollectionSchema[],
+  G extends readonly GlobalSchema[],
+>(
+  app: OpenApiApp<T, G>,
   options: CreateOpenApiHandlerOptions = {},
 ): (request: Request) => Promise<Response | undefined> {
   const specPath = options.specPath ?? "/openapi.json";
@@ -49,7 +59,7 @@ export function createOpenApiHandler<T extends readonly CollectionSchema[]>(
 
   let document: OpenApiDocument | undefined;
   function getDocument(): OpenApiDocument {
-    document ??= buildOpenApiDocument(app.core.collections, options);
+    document ??= buildOpenApiDocument(app.core.collections, app.core.globals, options);
     return document;
   }
 
@@ -58,10 +68,14 @@ export function createOpenApiHandler<T extends readonly CollectionSchema[]>(
     if (request.method !== "GET") return undefined;
 
     if (pathname === specPath) {
-      return new Response(JSON.stringify(getDocument()), { headers: { "content-type": "application/json" } });
+      return new Response(JSON.stringify(getDocument()), {
+        headers: { "content-type": "application/json" },
+      });
     }
     if (pathname === docsPath) {
-      return new Response(docsHtml(specPath, title), { headers: { "content-type": "text/html" } });
+      return new Response(docsHtml(specPath, title), {
+        headers: { "content-type": "text/html" },
+      });
     }
     return undefined;
   };

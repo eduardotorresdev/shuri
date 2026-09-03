@@ -11,7 +11,10 @@ export interface CollectionRoute {
  * @param basePath - The path prefix collection routes are mounted under.
  * @returns The matched route, or `undefined` if `pathname` doesn't match.
  */
-export function matchCollectionRoute(pathname: string, basePath: string): CollectionRoute | undefined {
+export function matchCollectionRoute(
+  pathname: string,
+  basePath: string,
+): CollectionRoute | undefined {
   if (!pathname.startsWith(basePath)) return undefined;
 
   const rest = pathname.slice(basePath.length).replace(/^\/+/, "").replace(/\/+$/, "");

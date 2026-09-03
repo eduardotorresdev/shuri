@@ -13,7 +13,10 @@ describe("createApiHandler", () => {
   it("dispatches POST on the collection path to insert, returning 201", async () => {
     const handler = createApiHandler(createFakeApp());
     const response = await handler(
-      new Request("http://localhost/collections/services", { method: "POST", body: JSON.stringify({ name: "Haircut" }) }),
+      new Request("http://localhost/collections/services", {
+        method: "POST",
+        body: JSON.stringify({ name: "Haircut" }),
+      }),
     );
     expect(response.status).toBe(201);
     expect(await response.json()).toMatchObject({ name: "Haircut" });
@@ -22,10 +25,15 @@ describe("createApiHandler", () => {
   it("dispatches GET/PATCH/DELETE on the record path", async () => {
     const handler = createApiHandler(createFakeApp());
     const inserted = await handler(
-      new Request("http://localhost/collections/services", { method: "POST", body: JSON.stringify({ name: "Haircut" }) }),
+      new Request("http://localhost/collections/services", {
+        method: "POST",
+        body: JSON.stringify({ name: "Haircut" }),
+      }),
     ).then((response) => response.json() as Promise<{ id: string }>);
 
-    const get = await handler(new Request(`http://localhost/collections/services/${inserted.id}`));
+    const get = await handler(
+      new Request(`http://localhost/collections/services/${inserted.id}`),
+    );
     expect(get.status).toBe(200);
 
     const patch = await handler(
@@ -36,7 +44,11 @@ describe("createApiHandler", () => {
     );
     expect(await patch.json()).toMatchObject({ name: "Massage" });
 
-    const del = await handler(new Request(`http://localhost/collections/services/${inserted.id}`, { method: "DELETE" }));
+    const del = await handler(
+      new Request(`http://localhost/collections/services/${inserted.id}`, {
+        method: "DELETE",
+      }),
+    );
     expect(del.status).toBe(204);
   });
 
@@ -54,21 +66,28 @@ describe("createApiHandler", () => {
 
   it("returns 405 for an unsupported method", async () => {
     const handler = createApiHandler(createFakeApp());
-    const response = await handler(new Request("http://localhost/collections/services", { method: "PUT" }));
+    const response = await handler(
+      new Request("http://localhost/collections/services", { method: "PUT" }),
+    );
     expect(response.status).toBe(405);
   });
 
   it("returns 400 for an invalid JSON body", async () => {
     const handler = createApiHandler(createFakeApp());
     const response = await handler(
-      new Request("http://localhost/collections/services", { method: "POST", body: "not json" }),
+      new Request("http://localhost/collections/services", {
+        method: "POST",
+        body: "not json",
+      }),
     );
     expect(response.status).toBe(400);
   });
 
   it("returns 400 for an invalid query param", async () => {
     const handler = createApiHandler(createFakeApp());
-    const response = await handler(new Request("http://localhost/collections/services?limit=-1"));
+    const response = await handler(
+      new Request("http://localhost/collections/services?limit=-1"),
+    );
     expect(response.status).toBe(400);
   });
 
@@ -84,6 +103,8 @@ describe("createApiHandler", () => {
       throw new Error("boom");
     };
     const handler = createApiHandler(collection);
-    await expect(handler(new Request("http://localhost/collections/services"))).rejects.toThrow("boom");
+    await expect(
+      handler(new Request("http://localhost/collections/services")),
+    ).rejects.toThrow("boom");
   });
 });

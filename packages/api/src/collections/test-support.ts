@@ -9,7 +9,7 @@ import {
   type StoreRecord,
 } from "@shuri/store";
 
-/** Test-only fixtures shared by this package's unit tests, kept independent of `@shuri/sdk`/`@shuri/store-memory`. */
+/** Test-only fixtures shared by this package's collection unit tests, kept independent of `@shuri/sdk`/`@shuri/store-memory`. */
 export const servicesSchema: CollectionSchema = {
   slug: "services",
   title: "Services",
@@ -60,7 +60,9 @@ export function createFakeCollectionStore(): CollectionStore<RecordInput> {
  * @param [collection] - The collection store returned for the "services" slug.
  * @returns A fake `{ store }` exposing `collection` under the "services" slug.
  */
-export function createFakeApp(collection: CollectionStore<RecordInput> = createFakeCollectionStore()): { store: Store } {
+export function createFakeApp(
+  collection: CollectionStore<RecordInput> = createFakeCollectionStore(),
+): { store: Store } {
   const store = {
     collection: (slug: string) => {
       if (slug !== "services") throw new UnknownCollectionError(slug);

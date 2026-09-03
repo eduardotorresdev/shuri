@@ -1,8 +1,10 @@
 import type { CollectionSchema } from "@shuri/core";
 import type { CollectionStore, RecordInput, Store } from "@shuri/store";
-import { InvalidJsonBodyError, MethodNotAllowedError, UnknownRouteError } from "./errors.js";
+import { MethodNotAllowedError } from "../errors.js";
+import { readJsonBody } from "../utils/request.js";
+import { jsonResponse, noContentResponse, toErrorResponse } from "../utils/response.js";
+import { UnknownRouteError } from "./errors.js";
 import { parseQuery } from "./query.js";
-import { jsonResponse, noContentResponse, toErrorResponse } from "./response.js";
 import { matchCollectionRoute } from "./routes.js";
 
 /**
@@ -12,7 +14,7 @@ import { matchCollectionRoute } from "./routes.js";
  * for an undeclared slug) — this handler doesn't reimplement that lookup.
  */
 export interface ApiApp<T extends readonly CollectionSchema[] = CollectionSchema[]> {
-  store: Store<T>;
+  store: Pick<Store<T>, "collection">;
 }
 
 export interface CreateApiHandlerOptions {
@@ -53,34 +55,40 @@ export function createApiHandler<T extends readonly CollectionSchema[]>(
       const route = matchCollectionRoute(url.pathname, basePath);
       if (!route) throw new UnknownRouteError();
 
-      const collection = app.store.collection(route.slug as never) as CollectionStore<RecordInput>;
-      return await (route.id ? handleRecord(request, collection, route.id) : handleCollection(request, collection, url));
+      const collection = app.store.collection(
+        route.slug as never,
+      ) as CollectionStore<RecordInput>;
+      return await (route.id
+        ? handleRecord(request, collection, route.id)
+        : handleCollection(request, collection, url));
     } catch (error) {
       return toErrorResponse(error);
     }
   };
 }
 
-async function readJsonBody(request: Request): Promise<RecordInput> {
-  try {
-    return (await request.json()) as RecordInput;
-  } catch {
-    throw new InvalidJsonBodyError();
-  }
-}
-
-async function handleCollection(request: Request, collection: CollectionStore<RecordInput>, url: URL): Promise<Response> {
+async function handleCollection(
+  request: Request,
+  collection: CollectionStore<RecordInput>,
+  url: URL,
+): Promise<Response> {
   switch (request.method) {
     case "GET":
       return jsonResponse(await collection.findMany(parseQuery(url.searchParams)));
     case "POST":
-      return jsonResponse(await collection.insert(await readJsonBody(request)), { status: 201 });
+      return jsonResponse(await collection.insert(await readJsonBody(request)), {
+        status: 201,
+      });
     default:
       throw new MethodNotAllowedError(request.method);
   }
 }
 
-async function handleRecord(request: Request, collection: CollectionStore<RecordInput>, id: string): Promise<Response> {
+async function handleRecord(
+  request: Request,
+  collection: CollectionStore<RecordInput>,
+  id: string,
+): Promise<Response> {
   switch (request.method) {
     case "GET":
       return jsonResponse(await collection.get(id));

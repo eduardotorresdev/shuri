@@ -1,7 +1,16 @@
-import { RecordNotFoundError, RecordValidationError, UnknownCollectionError } from "@shuri/store";
+import {
+  RecordNotFoundError,
+  RecordValidationError,
+  UnknownCollectionError,
+} from "@shuri/store";
 import { describe, expect, it } from "vitest";
-import { UnknownRouteError } from "./errors.js";
-import { errorResponse, jsonResponse, noContentResponse, toErrorResponse } from "./response.js";
+import { UnknownRouteError } from "../collections/errors.js";
+import {
+  errorResponse,
+  jsonResponse,
+  noContentResponse,
+  toErrorResponse,
+} from "./response.js";
 
 describe("jsonResponse", () => {
   it("serializes the body as JSON with a content-type header", async () => {
@@ -24,8 +33,13 @@ describe("errorResponse", () => {
   });
 
   it("merges extra details into the body", async () => {
-    const response = errorResponse(400, "Invalid record", { issues: [{ path: "name", message: "required" }] });
-    expect(await response.json()).toEqual({ error: "Invalid record", issues: [{ path: "name", message: "required" }] });
+    const response = errorResponse(400, "Invalid record", {
+      issues: [{ path: "name", message: "required" }],
+    });
+    expect(await response.json()).toEqual({
+      error: "Invalid record",
+      issues: [{ path: "name", message: "required" }],
+    });
   });
 });
 
@@ -47,7 +61,9 @@ describe("toErrorResponse", () => {
   it("maps an UnknownCollectionError to a 404", async () => {
     const response = toErrorResponse(new UnknownCollectionError("services"));
     expect(response.status).toBe(404);
-    expect(await response.json()).toEqual({ error: 'Unknown collection "services"' });
+    expect(await response.json()).toEqual({
+      error: 'Unknown collection "services"',
+    });
   });
 
   it("maps a RecordNotFoundError to a 404", async () => {
@@ -56,7 +72,9 @@ describe("toErrorResponse", () => {
   });
 
   it("maps a RecordValidationError to a 400 carrying its issues", async () => {
-    const error = new RecordValidationError("services", [{ path: "record.name", message: '"name" is required' }]);
+    const error = new RecordValidationError("services", [
+      { path: "record.name", message: '"name" is required' },
+    ]);
     const response = toErrorResponse(error);
 
     expect(response.status).toBe(400);

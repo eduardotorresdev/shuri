@@ -35,7 +35,10 @@ beforeEach(() => {
   handler = createApiHandler({ store });
 });
 
-async function insertService(name = "Haircut", price = 40): Promise<{ id: string; name: string; price: number }> {
+async function insertService(
+  name = "Haircut",
+  price = 40,
+): Promise<{ id: string; name: string; price: number }> {
   const response = await handler(
     new Request("http://localhost/collections/services", {
       method: "POST",
@@ -71,7 +74,9 @@ describe("api handler over a real Store", () => {
     await insertService("Haircut", 40);
     await insertService("Massage", 80);
 
-    const response = await handler(new Request("http://localhost/collections/services?limit=1&offset=1"));
+    const response = await handler(
+      new Request("http://localhost/collections/services?limit=1&offset=1"),
+    );
 
     expect(await response.json()).toMatchObject([{ name: "Massage" }]);
   });
@@ -81,7 +86,9 @@ describe("api handler over a real Store", () => {
     await insertService("Massage", 80);
 
     const where = JSON.stringify({ name: { op: "eq", value: "Massage" } });
-    const response = await handler(new Request(`http://localhost/collections/services?where=${where}`));
+    const response = await handler(
+      new Request(`http://localhost/collections/services?where=${where}`),
+    );
 
     expect(await response.json()).toMatchObject([{ name: "Massage" }]);
   });
@@ -89,14 +96,18 @@ describe("api handler over a real Store", () => {
   it("gets a single record via GET :id", async () => {
     const inserted = await insertService();
 
-    const response = await handler(new Request(`http://localhost/collections/services/${inserted.id}`));
+    const response = await handler(
+      new Request(`http://localhost/collections/services/${inserted.id}`),
+    );
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual(inserted);
   });
 
   it("returns 404 for a missing record", async () => {
-    const response = await handler(new Request("http://localhost/collections/services/missing"));
+    const response = await handler(
+      new Request("http://localhost/collections/services/missing"),
+    );
     expect(response.status).toBe(404);
   });
 
@@ -118,11 +129,15 @@ describe("api handler over a real Store", () => {
     const inserted = await insertService();
 
     const response = await handler(
-      new Request(`http://localhost/collections/services/${inserted.id}`, { method: "DELETE" }),
+      new Request(`http://localhost/collections/services/${inserted.id}`, {
+        method: "DELETE",
+      }),
     );
     expect(response.status).toBe(204);
 
-    const getResponse = await handler(new Request(`http://localhost/collections/services/${inserted.id}`));
+    const getResponse = await handler(
+      new Request(`http://localhost/collections/services/${inserted.id}`),
+    );
     expect(getResponse.status).toBe(404);
   });
 
@@ -132,29 +147,41 @@ describe("api handler over a real Store", () => {
   });
 
   it("returns 405 for an unsupported method", async () => {
-    const response = await handler(new Request("http://localhost/collections/services", { method: "PUT" }));
+    const response = await handler(
+      new Request("http://localhost/collections/services", { method: "PUT" }),
+    );
     expect(response.status).toBe(405);
   });
 
   it("returns 400 for an invalid JSON body", async () => {
     const response = await handler(
-      new Request("http://localhost/collections/services", { method: "POST", body: "not json" }),
+      new Request("http://localhost/collections/services", {
+        method: "POST",
+        body: "not json",
+      }),
     );
     expect(response.status).toBe(400);
   });
 
   it("returns 400 for an invalid query param", async () => {
-    const response = await handler(new Request("http://localhost/collections/services?limit=-1"));
+    const response = await handler(
+      new Request("http://localhost/collections/services?limit=-1"),
+    );
     expect(response.status).toBe(400);
   });
 
   it("returns 400 with issues when a POST body fails the collection's field validation", async () => {
     const response = await handler(
-      new Request("http://localhost/collections/services", { method: "POST", body: JSON.stringify({ price: 40 }) }),
+      new Request("http://localhost/collections/services", {
+        method: "POST",
+        body: JSON.stringify({ price: 40 }),
+      }),
     );
 
     expect(response.status).toBe(400);
-    expect(await response.json()).toMatchObject({ issues: [{ message: '"name" is required' }] });
+    expect(await response.json()).toMatchObject({
+      issues: [{ message: '"name" is required' }],
+    });
   });
 
   it("returns 400 when a PATCH body fails the collection's field validation, without touching the record", async () => {
@@ -168,14 +195,19 @@ describe("api handler over a real Store", () => {
     );
     expect(response.status).toBe(400);
 
-    const getResponse = await handler(new Request(`http://localhost/collections/services/${inserted.id}`));
+    const getResponse = await handler(
+      new Request(`http://localhost/collections/services/${inserted.id}`),
+    );
     expect(await getResponse.json()).toEqual(inserted);
   });
 
   it("respects a custom basePath", async () => {
     const customHandler = createApiHandler({ store }, { basePath: "/api" });
     const response = await customHandler(
-      new Request("http://localhost/api/services", { method: "POST", body: JSON.stringify({ name: "Haircut" }) }),
+      new Request("http://localhost/api/services", {
+        method: "POST",
+        body: JSON.stringify({ name: "Haircut" }),
+      }),
     );
     expect(response.status).toBe(201);
   });

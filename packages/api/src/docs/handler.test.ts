@@ -1,7 +1,7 @@
 import { createCore } from "@shuri/core";
 import { describe, expect, it } from "vitest";
-import { createOpenApiHandler } from "./openapi-handler.js";
-import { servicesSchema } from "./test-support.js";
+import { servicesSchema } from "../collections/test-support.js";
+import { createOpenApiHandler } from "./handler.js";
 
 function createApp() {
   return { core: createCore({ collections: [servicesSchema] }) };
@@ -38,7 +38,10 @@ describe("createOpenApiHandler", () => {
   });
 
   it("respects custom specPath/docsPath", async () => {
-    const handler = createOpenApiHandler(createApp(), { specPath: "/api/spec.json", docsPath: "/api/docs" });
+    const handler = createOpenApiHandler(createApp(), {
+      specPath: "/api/spec.json",
+      docsPath: "/api/docs",
+    });
 
     const specResponse = await handler(new Request("http://localhost/api/spec.json"));
     const docsResponse = await handler(new Request("http://localhost/api/docs"));
