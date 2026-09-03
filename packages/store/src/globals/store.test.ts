@@ -1,10 +1,10 @@
 import type { GlobalSchema } from "@shuri/core";
 import { createCore } from "@shuri/core";
 import { describe, expect, it, vi } from "vitest";
-import type { StoreAdapter } from "../adapter.js";
 import { RecordValidationError } from "../errors.js";
-import type { RecordInput } from "../record.js";
+import type { GlobalEvent } from "../events/types.js";
 import { createStore } from "../store.js";
+import { createFakeAdapter } from "../test-support.js";
 
 const siteSettings: GlobalSchema = {
   slug: "site",
@@ -16,40 +16,12 @@ const siteSettings: GlobalSchema = {
   ],
 };
 
-/**
- * Minimal `StoreAdapter` test double, just enough to exercise `GlobalStore`.
- * @returns An in-memory `StoreAdapter` test double.
- */
-function createFakeAdapter(): StoreAdapter {
-  const globalRecords = new Map<string, RecordInput>();
-
-  return {
-    async findMany() {
-      return [];
-    },
-    async findOne() {
-      return undefined;
-    },
-    async count() {
-      return 0;
-    },
-    async insert(_collection, data) {
-      return { ...data, id: "1" };
-    },
-    async update(_collection, id, data) {
-      return { ...data, id };
-    },
-    async delete() {},
-    async findGlobal(global) {
-      return globalRecords.get(global.slug);
-    },
-    async updateGlobal(global, data) {
-      const updated = { ...globalRecords.get(global.slug), ...data };
-      globalRecords.set(global.slug, updated);
-      return updated;
-    },
-  };
-}
+const seoDefaults: GlobalSchema = {
+  slug: "seo",
+  title: "SEO defaults",
+  category: { title: "Geral" },
+  fields: [{ type: "text", name: "name", required: true }],
+};
 
 describe("GlobalStore", () => {
   it("returns an empty object before the first update", async () => {
@@ -79,5 +51,44 @@ describe("GlobalStore", () => {
       RecordValidationError,
     );
     expect(spiedUpdate).not.toHaveBeenCalled();
+  });
+});
+
+describe("GlobalStore events", () => {
+  it("emits an update carrying the merged record, before the update resolves", async () => {
+    const core = createCore({ collections: [], globals: [siteSettings] });
+    const store = createStore(core, createFakeAdapter());
+    const events: GlobalEvent[] = [];
+    store.global("site").subscribe((event) => events.push(event));
+
+    await store.global("site").update({ name: "Acme" });
+    await store.global("site").update({ visits: 2 });
+
+    expect(events).toEqual([
+      { scope: "global", type: "update", global: "site", record: { name: "Acme" } },
+      {
+        scope: "global",
+        type: "update",
+        global: "site",
+        record: { name: "Acme", visits: 2 },
+      },
+    ]);
+  });
+
+  it("delivers only this global's events, and emits nothing for a rejected update", async () => {
+    const core = createCore({
+      collections: [],
+      globals: [siteSettings, seoDefaults],
+    });
+    const store = createStore(core, createFakeAdapter());
+    const events: GlobalEvent[] = [];
+    store.global("site").subscribe((event) => events.push(event));
+
+    await store.global("seo").update({ name: "Ignored" });
+    await expect(store.global("site").update({ visits: -1 })).rejects.toThrow(
+      RecordValidationError,
+    );
+
+    expect(events).toEqual([]);
   });
 });

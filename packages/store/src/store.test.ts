@@ -1,11 +1,11 @@
 import type { CollectionSchema, GlobalSchema } from "@shuri/core";
 import { createCore } from "@shuri/core";
 import { describe, expect, it } from "vitest";
-import type { StoreAdapter } from "./adapter.js";
 import { UnknownCollectionError } from "./collections/errors.js";
+import type { StoreEvent } from "./events/types.js";
 import { UnknownGlobalError } from "./globals/errors.js";
-import type { RecordId, RecordInput, StoreRecord } from "./record.js";
 import { createStore } from "./store.js";
+import { createFakeAdapter } from "./test-support.js";
 
 const services: CollectionSchema = {
   slug: "services",
@@ -21,50 +21,6 @@ const siteSettings: GlobalSchema = {
   category: { title: "Geral" },
   fields: [{ type: "text", name: "name", required: true }],
 };
-
-/**
- * Minimal `StoreAdapter` test double, just enough to exercise the `Store` facade.
- * @returns An in-memory `StoreAdapter` test double.
- */
-function createFakeAdapter(): StoreAdapter {
-  const records = new Map<RecordId, StoreRecord>();
-  const globalRecords = new Map<string, RecordInput>();
-  let nextId = 1;
-
-  return {
-    async findMany() {
-      return [...records.values()];
-    },
-    async findOne(_collection, id) {
-      return records.get(id);
-    },
-    async count() {
-      return records.size;
-    },
-    async insert(_collection, data) {
-      const record: StoreRecord = { ...data, id: String(nextId++) };
-      records.set(record.id, record);
-      return record;
-    },
-    async update(_collection, id, data) {
-      const existing = records.get(id);
-      const updated: StoreRecord = { ...existing, ...data, id };
-      records.set(id, updated);
-      return updated;
-    },
-    async delete(_collection, id) {
-      records.delete(id);
-    },
-    async findGlobal(global) {
-      return globalRecords.get(global.slug);
-    },
-    async updateGlobal(global, data) {
-      const updated = { ...globalRecords.get(global.slug), ...data };
-      globalRecords.set(global.slug, updated);
-      return updated;
-    },
-  };
-}
 
 describe("Store.collection", () => {
   it("resolves a collection store per slug declared on the core", async () => {
@@ -99,5 +55,28 @@ describe("Store.global", () => {
     const core = createCore({ collections: [], globals: [siteSettings] });
     const store = createStore(core, createFakeAdapter());
     expect(() => store.global("unknown" as never)).toThrow(UnknownGlobalError);
+  });
+});
+
+describe("Store.events", () => {
+  it("is the single bus every collection and global of the store publishes to", async () => {
+    const core = createCore({ collections: [services], globals: [siteSettings] });
+    const store = createStore(core, createFakeAdapter());
+    const events: StoreEvent[] = [];
+    store.events.subscribe((event) => events.push(event));
+
+    const record = await store.collection("services").insert({ name: "Haircut" });
+    await store.global("site").update({ name: "Acme" });
+
+    expect(events).toEqual([
+      {
+        scope: "collection",
+        type: "create",
+        collection: "services",
+        id: record.id,
+        record,
+      },
+      { scope: "global", type: "update", global: "site", record: { name: "Acme" } },
+    ]);
   });
 });
