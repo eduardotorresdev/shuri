@@ -1,6 +1,8 @@
 import type { CollectionSchema, GlobalSchema } from "@shuri/core";
 import { collectionSchema, globalSchema, type JsonSchema } from "./json-schema.js";
-import { collectionPaths, globalPaths } from "./paths.js";
+import { collectionPaths } from "./paths/collections.js";
+import { globalPaths } from "./paths/globals.js";
+import { realtimePaths } from "./paths/realtime.js";
 
 export type { JsonSchema } from "./json-schema.js";
 
@@ -16,6 +18,10 @@ export interface BuildOpenApiDocumentOptions {
   basePath?: string;
   /** Path prefix global routes are mounted under. Must match `createGlobalsApiHandler`'s. Defaults to "/globals". */
   globalsBasePath?: string;
+  /** Path the event stream is mounted at. Must match `createRealtimeHandler`'s. Defaults to "/events". */
+  realtimeBasePath?: string;
+  /** Whether to describe the event stream. Defaults to `true`. */
+  realtime?: boolean;
   title?: string;
   version?: string;
 }
@@ -23,7 +29,8 @@ export interface BuildOpenApiDocumentOptions {
 /**
  * Builds an OpenAPI 3.1 document describing the REST surface `createApiHandler`/`createGlobalsApiHandler`
  * serve: one path pair (list/create, get/update/delete) per collection and one path pair (get/update)
- * per global, mirroring `handler.ts`'/`globals-handler.ts`'s routes exactly, plus a
+ * per global, plus the event stream `createRealtimeHandler` serves, mirroring those routes exactly,
+ * plus a
  * `components.schemas` entry per collection/global derived from its fields (see `fieldSchema`). Pure
  * and framework-agnostic, so it can be tested without HTTP.
  * @param collections - The collections to describe.
@@ -38,6 +45,7 @@ export function buildOpenApiDocument(
 ): OpenApiDocument {
   const basePath = options.basePath ?? "/collections";
   const globalsBasePath = options.globalsBasePath ?? "/globals";
+  const realtimeBasePath = options.realtimeBasePath ?? "/events";
   const paths: Record<string, Record<string, unknown>> = {};
   const schemas: Record<string, JsonSchema> = {};
 
@@ -50,6 +58,10 @@ export function buildOpenApiDocument(
     Object.assign(paths, globalPaths(global, globalsBasePath));
     schemas[global.slug] = globalSchema(global);
   }
+
+  // The event union is deliberately kept out of `components.schemas`: its keys are raw user slugs
+  // (`schemas[collection.slug]`), so any name added there could collide with one of them.
+  if (options.realtime !== false) Object.assign(paths, realtimePaths(realtimeBasePath));
 
   return {
     openapi: "3.1.0",

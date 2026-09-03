@@ -1,4 +1,5 @@
 export * from "./errors.js";
+export * from "./handler.js";
 export * from "./utils/request.js";
 export * from "./utils/response.js";
 export * from "./collections/errors.js";
@@ -7,5 +8,11 @@ export * from "./collections/query.js";
 export * from "./collections/routes.js";
 export * from "./globals/handler.js";
 export * from "./globals/routes.js";
+export * from "./realtime/errors.js";
+export * from "./realtime/filter.js";
+export * from "./realtime/frame.js";
+export * from "./realtime/handler.js";
+export * from "./realtime/query.js";
+export * from "./realtime/routes.js";
 export * from "./docs/openapi.js";
 export * from "./docs/handler.js";

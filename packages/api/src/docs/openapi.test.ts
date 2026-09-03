@@ -43,6 +43,7 @@ describe("buildOpenApiDocument", () => {
   it("emits list/create and get/update/delete paths per collection, under basePath", () => {
     const document = buildOpenApiDocument([servicesSchema], [], {
       basePath: "/api",
+      realtime: false,
     });
 
     expect(Object.keys(document.paths)).toEqual(["/api/services", "/api/services/{id}"]);
@@ -74,7 +75,8 @@ describe("buildOpenApiDocument", () => {
       type: "array",
       items: { type: "string" },
     });
-    expect(properties?.["id"]).toEqual({ type: "string" });
+    // Read-only: the store generates the id and rejects a payload carrying one.
+    expect(properties?.["id"]).toEqual({ type: "string", readOnly: true });
     expect(schema?.required).toEqual(["name"]);
   });
 
@@ -94,6 +96,7 @@ describe("buildOpenApiDocument", () => {
     it("emits only get/update paths per global, under globalsBasePath", () => {
       const document = buildOpenApiDocument([], [siteSettings], {
         globalsBasePath: "/api-globals",
+        realtime: false,
       });
 
       expect(Object.keys(document.paths)).toEqual(["/api-globals/site"]);
@@ -126,5 +129,37 @@ describe("buildOpenApiDocument", () => {
       expect(schema?.properties?.["id"]).toBeUndefined();
       expect(schema?.required).toEqual(["name"]);
     });
+  });
+});
+
+describe("buildOpenApiDocument with the event stream", () => {
+  it("describes the event stream at the default path", () => {
+    const document = buildOpenApiDocument([servicesSchema]);
+    const stream = document.paths["/events"]?.["get"] as {
+      responses: Record<string, { content: Record<string, unknown> }>;
+      parameters: { name: string }[];
+    };
+
+    expect(stream.responses["200"]?.content).toHaveProperty("text/event-stream");
+    expect(stream.parameters.map((parameter) => parameter.name)).toEqual([
+      "collection",
+      "global",
+      "id",
+      "events",
+    ]);
+  });
+
+  it("honors a custom realtime base path", () => {
+    const document = buildOpenApiDocument([servicesSchema], [], {
+      realtimeBasePath: "/stream",
+    });
+
+    expect(document.paths["/stream"]).toBeDefined();
+    expect(document.paths["/events"]).toBeUndefined();
+  });
+
+  it("omits the event stream when realtime is disabled", () => {
+    const document = buildOpenApiDocument([servicesSchema], [], { realtime: false });
+    expect(document.paths["/events"]).toBeUndefined();
   });
 });

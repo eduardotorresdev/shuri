@@ -18,6 +18,7 @@ export function createFakeGlobalStore(): GlobalStore<RecordInput> {
   let record: RecordInput = {};
 
   return {
+    subscribe: () => () => {},
     async get() {
       return record;
     },

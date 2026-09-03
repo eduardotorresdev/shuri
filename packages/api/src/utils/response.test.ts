@@ -3,14 +3,39 @@ import {
   RecordValidationError,
   UnknownCollectionError,
 } from "@shuri/store";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { UnknownRouteError } from "../collections/errors.js";
 import {
   errorResponse,
+  eventStreamResponse,
   jsonResponse,
   noContentResponse,
   toErrorResponse,
 } from "./response.js";
+
+const decoder = new TextDecoder();
+
+/**
+ * Reads a streaming response's body, failing loudly if it has none.
+ * @param response - The streaming response to read.
+ * @returns A reader over the response body.
+ */
+function bodyReader(response: Response): ReadableStreamDefaultReader<Uint8Array> {
+  if (!response.body) throw new Error("expected a streaming body");
+  return response.body.getReader();
+}
+
+/**
+ * Reads the next chunk written to `response`'s body, as text.
+ * @param reader - The reader over the response body.
+ * @returns The decoded chunk, or `undefined` once the stream is closed.
+ */
+async function readChunk(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+): Promise<string | undefined> {
+  const { value, done } = await reader.read();
+  return done ? undefined : decoder.decode(value);
+}
 
 describe("jsonResponse", () => {
   it("serializes the body as JSON with a content-type header", async () => {
@@ -87,5 +112,72 @@ describe("toErrorResponse", () => {
   it("rethrows errors it doesn't recognize", () => {
     const error = new Error("boom");
     expect(() => toErrorResponse(error)).toThrow(error);
+  });
+});
+
+describe("eventStreamResponse", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("responds with the streaming headers", () => {
+    const response = eventStreamResponse(() => () => {}, { heartbeatMs: 0 });
+
+    expect(response.headers.get("content-type")).toBe("text/event-stream");
+    expect(response.headers.get("cache-control")).toBe("no-cache, no-transform");
+    expect(response.headers.get("connection")).toBe("keep-alive");
+    expect(response.headers.get("x-accel-buffering")).toBe("no");
+  });
+
+  it("delivers the frames sent by start to the reader", async () => {
+    const response = eventStreamResponse(
+      (send) => {
+        send("event: create\ndata: {}\n\n");
+        send("event: delete\ndata: {}\n\n");
+        return () => {};
+      },
+      { heartbeatMs: 0 },
+    );
+    const reader = bodyReader(response);
+
+    expect(await readChunk(reader)).toBe("event: create\ndata: {}\n\n");
+    expect(await readChunk(reader)).toBe("event: delete\ndata: {}\n\n");
+    await reader.cancel();
+  });
+
+  it("runs the teardown when the reader cancels the stream", async () => {
+    const teardown = vi.fn();
+    const response = eventStreamResponse(() => teardown, { heartbeatMs: 0 });
+
+    await bodyReader(response).cancel();
+
+    expect(teardown).toHaveBeenCalledTimes(1);
+  });
+
+  it("closes the stream and runs the teardown exactly once when the signal aborts", async () => {
+    const controller = new AbortController();
+    const teardown = vi.fn();
+    const response = eventStreamResponse(() => teardown, {
+      signal: controller.signal,
+      heartbeatMs: 0,
+    });
+    const reader = bodyReader(response);
+
+    controller.abort();
+
+    expect(await readChunk(reader)).toBeUndefined();
+    await reader.cancel();
+    expect(teardown).toHaveBeenCalledTimes(1);
+  });
+
+  it("writes a keep-alive comment every heartbeatMs", async () => {
+    vi.useFakeTimers();
+    const response = eventStreamResponse(() => () => {}, { heartbeatMs: 1000 });
+    const reader = bodyReader(response);
+
+    vi.advanceTimersByTime(1000);
+
+    expect(await readChunk(reader)).toBe(": keep-alive\n\n");
+    await reader.cancel();
   });
 });

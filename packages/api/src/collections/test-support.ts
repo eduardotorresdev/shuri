@@ -3,6 +3,7 @@ import {
   RecordNotFoundError,
   UnknownCollectionError,
   type CollectionStore,
+  type CollectionSubscribe,
   type RecordId,
   type RecordInput,
   type Store,
@@ -18,11 +19,15 @@ export const servicesSchema: CollectionSchema = {
   fields: [{ type: "text", name: "name", required: true }],
 };
 
+// A no-op arrow with no parameters satisfies both of `CollectionSubscribe`'s call signatures.
+const noopSubscribe: CollectionSubscribe<RecordInput> = () => () => {};
+
 export function createFakeCollectionStore(): CollectionStore<RecordInput> {
   const records = new Map<RecordId, StoreRecord>();
   let nextId = 1;
 
   return {
+    subscribe: noopSubscribe,
     async findMany() {
       return [...records.values()];
     },
