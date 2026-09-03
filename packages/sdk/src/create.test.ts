@@ -122,3 +122,72 @@ describe("create", () => {
       .catch(() => {});
   });
 });
+
+describe("app subscriptions", () => {
+  it("delivers a collection's own events, typed from its fields (compile-time)", async () => {
+    const app = createApp();
+    const seen: string[] = [];
+
+    app.collections.posts.subscribe((event) => {
+      seen.push(event.type);
+      // A delete event carries no record, so `record` is only reachable after narrowing by `type`.
+      if (event.type === "delete") return;
+      const title: string = event.record.title;
+      const status: "draft" | "published" = event.record.status;
+      expect({ title, status }).toEqual({ title: "Hello", status: "draft" });
+    });
+
+    const post = await app.collections.posts.insert({
+      title: "Hello",
+      status: "draft",
+    });
+    await app.collections.posts.delete(post.id);
+
+    expect(seen).toEqual(["create", "delete"]);
+  });
+
+  it("delivers only updates and deletes to a per-record subscription", async () => {
+    const app = createApp();
+    const post = await app.collections.posts.insert({
+      title: "Hello",
+      status: "draft",
+    });
+    const seen: string[] = [];
+    app.collections.posts.subscribe(post.id, (event) => {
+      seen.push(event.type);
+      // @ts-expect-error a delete event carries no record, so the union has no common `record`
+      void event.record;
+    });
+
+    await app.collections.posts.insert({ title: "Another", status: "draft" });
+    await app.collections.posts.update(post.id, { title: "Hello again" });
+    await app.collections.posts.delete(post.id);
+
+    expect(seen).toEqual(["update", "delete"]);
+  });
+
+  it("stops delivering once unsubscribed, and delivers a global's updates", async () => {
+    const app = create({
+      collections,
+      globals: [
+        {
+          slug: "site",
+          title: "Site settings",
+          category: { title: "Geral" },
+          fields: [{ type: "text", name: "name", required: true }],
+        },
+      ] as const,
+      adapter: createMemoryAdapter(),
+    });
+    const names: (string | undefined)[] = [];
+    const unsubscribe = app.globals.site.subscribe((event) => {
+      names.push(event.record.name);
+    });
+
+    await app.globals.site.update({ name: "Acme" });
+    unsubscribe();
+    await app.globals.site.update({ name: "Acme Co" });
+
+    expect(names).toEqual(["Acme"]);
+  });
+});

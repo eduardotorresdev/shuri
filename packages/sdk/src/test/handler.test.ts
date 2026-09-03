@@ -1,5 +1,5 @@
 import { createMemoryAdapter } from "@shuri/store-memory";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { create } from "../create.js";
 
 /**
@@ -118,5 +118,94 @@ describe("app.handler with globals", () => {
     });
     const response = await app.handler(new Request("http://localhost/api-globals/site"));
     expect(response.status).toBe(200);
+  });
+});
+
+/**
+ * Reads the next SSE frame off a streaming response, as raw text.
+ * @param response - The streaming response to read from.
+ * @returns The frame's text, exactly as written on the wire.
+ */
+async function readFrame(response: Response): Promise<string> {
+  if (!response.body) throw new Error("expected a streaming body");
+  const { value } = await response.body.getReader().read();
+  return new TextDecoder().decode(value);
+}
+
+describe("app.handler event stream", () => {
+  let controller: AbortController;
+
+  beforeEach(() => {
+    controller = new AbortController();
+  });
+
+  afterEach(() => {
+    controller.abort();
+  });
+
+  function streamRequest(url: string): Request {
+    return new Request(url, { signal: controller.signal });
+  }
+
+  it("serves the event stream declared on the app", async () => {
+    const app = create({ collections, adapter: createMemoryAdapter() });
+
+    const response = await app.handler(streamRequest("http://localhost/events"));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("text/event-stream");
+  });
+
+  it("streams a write made through app.collections, proving both surfaces share one bus", async () => {
+    const app = create({
+      collections,
+      adapter: createMemoryAdapter(),
+      realtime: { heartbeatMs: 0 },
+    });
+    const response = await app.handler(streamRequest("http://localhost/events"));
+
+    // Start reading before writing: the subscription is live once the handler resolved.
+    const frame = readFrame(response);
+    const inserted = await app.collections.services.insert({ name: "Haircut" });
+
+    expect(await frame).toBe(
+      `event: create\ndata: ${JSON.stringify({
+        collection: "services",
+        id: inserted.id,
+        record: inserted,
+      })}\n\n`,
+    );
+  });
+
+  it("describes the base paths actually served in the OpenAPI document", async () => {
+    const app = create({
+      collections,
+      adapter: createMemoryAdapter(),
+      api: { basePath: "/api" },
+      realtime: { basePath: "/stream" },
+    });
+
+    const response = await app.handler(new Request("http://localhost/openapi.json"));
+    const document = (await response.json()) as { paths: Record<string, unknown> };
+
+    expect(Object.keys(document.paths)).toEqual([
+      "/api/services",
+      "/api/services/{id}",
+      "/stream",
+    ]);
+  });
+
+  it("honors the realtime.basePath option passed to create()", async () => {
+    const app = create({
+      collections,
+      adapter: createMemoryAdapter(),
+      realtime: { basePath: "/stream", heartbeatMs: 0 },
+    });
+
+    const response = await app.handler(streamRequest("http://localhost/stream"));
+    expect(response.headers.get("content-type")).toBe("text/event-stream");
+
+    const missing = await app.handler(streamRequest("http://localhost/events"));
+    expect(missing.status).toBe(404);
   });
 });

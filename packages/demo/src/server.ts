@@ -8,6 +8,16 @@ const port = Number(process.env["PORT"] ?? 3000);
 
 const app = create({ collections, globals, adapter: createMemoryAdapter() });
 
+// Subscribed before the seed below, so the boot output already shows the in-process side of the
+// same bus the /events route streams from.
+const unsubscribe = app.collections.posts.subscribe((event) => {
+  console.log(`  [subscribe] posts ${event.type} ${event.id}`);
+});
+process.on("SIGINT", () => {
+  unsubscribe();
+  process.exit(0);
+});
+
 const author = await app.collections.authors.insert({
   name: "Ada Lovelace",
   email: "ada@example.com",
@@ -29,3 +39,6 @@ console.log(`  Collections: http://localhost:${port}/collections/posts`);
 console.log(`  Globals:     http://localhost:${port}/globals/site`);
 console.log(`  OpenAPI doc: http://localhost:${port}/openapi.json`);
 console.log(`  Docs UI:     http://localhost:${port}/docs`);
+console.log(
+  `  Events:      curl -N "http://localhost:${port}/events?collection=posts&events=create,delete"`,
+);

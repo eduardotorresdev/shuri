@@ -1,10 +1,9 @@
 import {
-  createApiHandler,
-  createGlobalsApiHandler,
-  createOpenApiHandler,
+  createHandler,
   type CreateApiHandlerOptions,
   type CreateGlobalsApiHandlerOptions,
   type CreateOpenApiHandlerOptions,
+  type CreateRealtimeHandlerOptions,
 } from "@shuri/api";
 import {
   createCore,
@@ -33,6 +32,8 @@ export interface CreateConfig<
   api?: CreateApiHandlerOptions;
   /** Options for the globals HTTP handler exposed as `app.handler`. See `@shuri/api`'s `createGlobalsApiHandler`. */
   globalsApi?: CreateGlobalsApiHandlerOptions;
+  /** Options for the event stream exposed on `app.handler`. See `@shuri/api`'s `createRealtimeHandler`. */
+  realtime?: CreateRealtimeHandlerOptions;
   /** Options for the OpenAPI document/docs page exposed on `app.handler`. See `@shuri/api`'s `createOpenApiHandler`. */
   openapi?: CreateOpenApiHandlerOptions;
 }
@@ -52,8 +53,8 @@ type AppGlobals<G extends readonly GlobalSchema[]> = {
  * for both programmatic access (`collections`/`globals`) and HTTP access (`handler`). Exposes one
  * property per collection slug under `collections` (`app.collections.posts.insert(...)`) and one
  * property per global slug under `globals` (`app.globals.site.get()`), and `handler` to serve every
- * collection and global over HTTP, plus the OpenAPI document (`/openapi.json`) and a docs page
- * (`/docs`) describing them:
+ * collection and global over HTTP, plus the change event stream (`/events`), the OpenAPI document
+ * (`/openapi.json`) and a docs page (`/docs`) describing them:
  *
  *   const app = create({ collections, globals, adapter });
  *   Deno.serve(app.handler);
@@ -120,16 +121,17 @@ export function create<
   });
   const store = createStore(core, config.adapter);
 
-  const openApiHandler = createOpenApiHandler({ core }, config.openapi);
-  const globalsApiHandler = createGlobalsApiHandler({ store }, config.globalsApi);
-  const apiHandler = createApiHandler({ store }, config.api);
-
   return {
     collections: buildCollections(core, store),
     globals: buildGlobals(core, store),
-    handler: async (request) =>
-      (await openApiHandler(request)) ??
-      (await globalsApiHandler(request)) ??
-      apiHandler(request),
+    handler: createHandler(
+      { core, store },
+      {
+        api: config.api,
+        globalsApi: config.globalsApi,
+        realtime: config.realtime,
+        openapi: config.openapi,
+      },
+    ),
   };
 }
