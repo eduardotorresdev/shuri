@@ -1,0 +1,32 @@
+{
+  "name": "@shuri/auth",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsgo -p tsconfig.build.json",
+    "typecheck": "tsgo --noEmit -p tsconfig.json",
+    "lint": "oxlint",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@shuri/api": "workspace:*",
+    "@shuri/core": "workspace:*",
+    "@shuri/store": "workspace:*",
+    "@shuri/validate": "workspace:*"
+  },
+  "devDependencies": {
+    "@shuri/config": "workspace:*",
+    "@shuri/store-memory": "workspace:*",
+    "@types/node": "^22.13.1",
+    "vitest": "^3.2.4"
+  }
+}
