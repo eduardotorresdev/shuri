@@ -69,7 +69,7 @@ async function readBody(req: IncomingMessage): Promise<Buffer | undefined> {
 }
 
 /**
- * Writes the headers, flushes them, then streams the body. Flushing matters for an event stream: a
+ * Writes the headers (`Set-Cookie` kept as separate values), flushes them, then streams the body. Flushing matters for an event stream: a
  * client only considers it open once the headers arrive, and the body may then stay open for hours.
  * `pipeline` handles backpressure and teardown, which a hand-rolled reader loop would have to
  * reimplement (`write` returning `false`, waiting for "drain", cancelling on disconnect).
@@ -78,7 +78,14 @@ async function readBody(req: IncomingMessage): Promise<Buffer | undefined> {
  * @returns Nothing; resolves once the whole body has been written.
  */
 async function sendWebResponse(response: Response, res: ServerResponse): Promise<void> {
-  res.writeHead(response.status, Object.fromEntries(response.headers));
+  // `Object.fromEntries` alone would collapse several `Set-Cookie` values into one comma-joined
+  // header, which no browser parses back into separate cookies. `getSetCookie()` is the one accessor
+  // that keeps them apart, and the OIDC callback really does set two.
+  const headers: Record<string, string | string[]> = Object.fromEntries(response.headers);
+  const cookies = response.headers.getSetCookie();
+  if (cookies.length > 0) headers["set-cookie"] = cookies;
+
+  res.writeHead(response.status, headers);
   res.flushHeaders();
 
   if (!response.body) {

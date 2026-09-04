@@ -2,7 +2,7 @@
   "extends": ["../config/oxlintrc.base.json"],
   "overrides": [
     {
-      "files": ["src/server.ts", "src/node-http-adapter.ts"],
+      "files": ["src/server.ts", "src/node-http-adapter.ts", "src/auth-walkthrough.ts"],
       "rules": {
         "no-console": "off"
       }
