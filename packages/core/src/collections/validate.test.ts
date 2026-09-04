@@ -18,6 +18,17 @@ describe("validateCollections", () => {
     expect(validateCollections([baseCollection()])).toEqual([]);
   });
 
+  it("accepts internal: true, which is metadata this package only validates", () => {
+    expect(validateCollections([baseCollection({ internal: true })])).toEqual([]);
+  });
+
+  it("rejects a non-boolean internal", () => {
+    const issues = validateCollections([
+      baseCollection({ internal: "yes" as unknown as boolean }),
+    ]);
+    expect(issues).toEqual([expect.stringContaining('"internal" must be a boolean')]);
+  });
+
   it("requires slug, title, singular and plural", () => {
     const issues = validateCollections([
       baseCollection({ slug: "", title: "", singular: "", plural: "" }),

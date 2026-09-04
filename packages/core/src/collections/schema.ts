@@ -1,4 +1,11 @@
-import { keyedArray, object, required, type Validator } from "@shuri/validate";
+import {
+  boolean,
+  keyedArray,
+  object,
+  optional,
+  required,
+  type Validator,
+} from "@shuri/validate";
 import { fieldsValidator } from "../fields/validator.js";
 import type { CollectionSchema } from "./types.js";
 
@@ -8,6 +15,7 @@ function collectionValidator(slugs: Set<string>): Validator<CollectionSchema> {
     title: required('"title" is required'),
     singular: required('"singular" is required'),
     plural: required('"plural" is required'),
+    internal: optional(boolean('"internal" must be a boolean')),
     fields: fieldsValidator(slugs),
   });
 }

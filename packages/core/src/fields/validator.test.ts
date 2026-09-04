@@ -72,6 +72,24 @@ describe("fieldValidator", () => {
   });
 });
 
+describe("hidden", () => {
+  it("accepts a boolean", () => {
+    const issues = validate<Field>(
+      { type: "text", name: "passwordHash", hidden: true },
+      fieldValidator(new Set()),
+    );
+    expect(issues).toEqual([]);
+  });
+
+  it("rejects a non-boolean", () => {
+    const issues = validate<Field>(
+      { type: "text", name: "passwordHash", hidden: "yes" as unknown as boolean },
+      fieldValidator(new Set()),
+    );
+    expect(issues).toEqual([{ path: "hidden", message: '"hidden" must be a boolean' }]);
+  });
+});
+
 describe("fieldsValidator", () => {
   it("requires at least one field", () => {
     const issues = validate<readonly Field[]>([], fieldsValidator(new Set()));

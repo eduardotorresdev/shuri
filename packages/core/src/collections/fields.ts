@@ -2,6 +2,14 @@ export interface FieldBase {
   name: string;
   label?: string;
   required?: boolean;
+  /**
+   * Keeps the value off the HTTP surface entirely: `@shuri/api` strips it from REST responses and
+   * SSE frames, leaves it out of the OpenAPI document, and rejects a request body that writes it.
+   * Programmatic access through `@shuri/store` is unaffected — this is a surface flag, not a
+   * persistence one, so `InferFields` still includes the field. Shared with `GlobalSchema`, whose
+   * fields are the same `Field` union.
+   */
+  hidden?: boolean;
 }
 
 export interface TextField extends FieldBase {

@@ -1,8 +1,10 @@
 import {
   all,
+  boolean,
   keyedArray,
   nonEmpty,
   object,
+  optional,
   refine,
   required,
   unique,
@@ -74,7 +76,10 @@ function relationFieldValidator(
  */
 export function fieldValidator(slugs: Set<string>): Validator<Field> {
   return all<Field>(
-    object<Field>({ name: required('"name" is required') }),
+    object<Field>({
+      name: required('"name" is required'),
+      hidden: optional(boolean('"hidden" must be a boolean')),
+    }),
     (field, ctx) => {
       switch (field.type) {
         case "select":
