@@ -1,9 +1,11 @@
 # @shuri/auth
 
 Authentication for a Shuri app: signup, login, logout and current-session by email and password, plus
-sign-in through OIDC providers the host declares (Google as a preset). The three collections it needs
-live in the **same** `Core`/`Store`/adapter as the app's own, so they get the same validation, the
-same event bus, and work on any engine with no second port to configure.
+sign-in through OIDC providers the host declares — either a fully static config, or a `{ id, preset }`
+slot (Google and Microsoft ship as presets) whose `clientId`/`clientSecret`/`redirectUri` an admin
+fills in through `_oidc_credentials` instead of code. The four collections it needs live in the
+**same** `Core`/`Store`/adapter as the app's own, so they get the same validation, the same event bus,
+and work on any engine with no second port to configure.
 
 Zero third-party dependencies, like the rest of the repo: PBKDF2, HMAC and SHA-256 come from
 WebCrypto, and base64url and cookies are written here.
@@ -16,7 +18,7 @@ password reset are deliberately out (see "Deliberately absent" below).
 ```
 src/
   index.ts                    re-exports the public surface
-  collections.ts               users / _sessions / _accounts, all internal: true
+  collections.ts               users / _sessions / _accounts / _oidc_credentials, all internal: true
   config.ts                     AuthConfig -> AuthContext: defaults, bound collections, OIDC runtime
   create.ts                      createAuth -> AuthApi; assertNoAuthSlugCollision
   errors.ts                       every error, all extending ApiError/IssuesApiError
@@ -51,8 +53,9 @@ src/
     signup.ts                     signUp + CredentialsContext
     login.ts                      signIn, with the equal-cost dummy hash
   oidc/
-    types.ts                     OidcProviderConfig/ResolvedProvider/IdTokenClaims
-    config.ts                     oidcProvider: validate + defaults
+    types.ts                     OidcProviderConfig/OidcProviderSlot/ProviderDeclaration/ResolvedProvider/IdTokenClaims
+    config.ts                     oidcProvider / oidcProviderSlot: validate + defaults
+    credentials.ts                 resolveProviderSlot: (slot, _oidc_credentials row) -> ResolvedProvider
     discovery.ts                  createDiscovery: fetch, check, cache
     pkce.ts                       createPkcePair (S256)
     transaction.ts                the signed, short-lived transaction cookie
@@ -61,11 +64,13 @@ src/
     id-token.ts                   decodeIdToken + assertValidClaims
     link.ts                       resolveOidcUser: (provider, sub) -> local user
     presets/google.ts             googleProvider
+    presets/microsoft.ts          microsoftProvider (tenant-scoped issuer)
     test-support.ts               fetch stub, id_token builder, the OIDC harness
   routes/
     handler.ts                   createAuthHandler: the falling handler
     signup.ts / login.ts / logout.ts / me.ts
-    oidc-start.ts / oidc-callback.ts
+    oidc-start.ts                  requireProvider/resolveProvider, handleOidcStart
+    oidc-callback.ts               handleOidcCallback
     session-response.ts / metadata.ts
   test/
     password-flow.test.ts        signup -> me -> logout -> login over HTTP
@@ -73,6 +78,7 @@ src/
     session-expiry.test.ts        lazy expiry and sliding renewal
     oidc-flow.test.ts             start -> callback against a stubbed fetch
     oidc-transaction.test.ts      every way a transaction fails, failing identically
+    oidc-provider-slots.test.ts   a { id, preset } provider completed from _oidc_credentials
 ```
 
 ## The routes
@@ -83,8 +89,8 @@ src/
 | POST   | `/auth/login`                   | 200 `{ user }` + cookie  | 400 · **401 generic** · 405 · 415 |
 | POST   | `/auth/logout`                  | 204 + clearing cookie    | 405                               |
 | GET    | `/auth/me`                      | 200 `{ user }`           | 401 · 405                         |
-| GET    | `/auth/oidc/:provider`          | 302 + transaction cookie | 404 · 405 · 502                   |
-| GET    | `/auth/oidc/:provider/callback` | 302 + session cookie     | 400 · 403 · 404 · 502             |
+| GET    | `/auth/oidc/:provider`          | 302 + transaction cookie | 404 · 405 · 500 · 502             |
+| GET    | `/auth/oidc/:provider/callback` | 302 + session cookie     | 400 · 403 · 404 · 500 · 502       |
 
 `basePath` defaults to `/auth`; anything outside it returns `undefined`, the same fall-through
 contract `@shuri/api`'s handlers follow.
@@ -101,7 +107,25 @@ contract `@shuri/api`'s handlers follow.
   `number` (epoch ms), not an ISO string, because the memory adapter compares strings with
   `localeCompare` — locale-dependent collation — while numbers take the exact `a - b` branch.
   Exported individually so a host can extend one (`{ ...usersCollection, fields: [...] }`) instead of
-  forking the package.
+  forking the package. `_oidc_credentials` is the fourth: one row per `OidcProviderSlot`'s `provider`
+  id, holding what a preset needs to run (`clientId`/`clientSecret`/`redirectUri`, plus `tenant` for
+  `microsoft`). Also `internal: true`, for the same reason `users` is — there's no RBAC yet, so a
+  served `_oidc_credentials` would hand out every configured `clientId` (and, absent `hidden` on
+  `clientSecret`, the secrets themselves) to an unauthenticated caller. Reached only through
+  `AuthApi.oidcCredentials`; a host wires it up behind its own authenticated admin route.
+- **oidc/config.ts + oidc/credentials.ts — two ways to declare a provider.** A fully static
+  `OidcProviderConfig` (own `clientId`/`clientSecret`/`redirectUri`) is validated and resolved once at
+  boot by `oidcProvider`, exactly as before. A `OidcProviderSlot` (`{ id, preset }`) is validated at
+  boot by `oidcProviderSlot` — id shape and preset name only, since it carries no credentials — and
+  completed by `resolveProviderSlot` on **every** sign-in, reading its `_oidc_credentials` row fresh:
+  deliberately uncached, unlike `discovery.ts`'s hour-long cache, which exists to spare a *network*
+  round trip. This is one local store read, on a route that is about to make one anyway (the session
+  insert after a successful callback). The two are told apart structurally
+  (`isProviderSlot`/`ProviderDeclaration`) — a slot never carries `clientId`, a static config always
+  does — so no extra discriminant tag was needed. A slot whose row doesn't exist yet answers the same
+  404 as an undeclared provider (`UnknownProviderError`); a slot whose row is missing something its
+  preset needs (`microsoft` without `tenant`) answers 500 (`IncompleteOidcCredentialsError`) — the
+  provider is declared and even has a row, just not a *usable* one.
 - **password/** — PBKDF2-HMAC-SHA256 at 600k iterations behind a `PasswordHasher` port, so a Node
   host can plug argon2 in. The stored format is self-describing, and `verify` reads iterations, salt
   and key length **from the stored hash**, never from the current config: raising the cost next year
@@ -211,3 +235,8 @@ nothing here depends on `@shuri/sdk`, and the dependency order stays
   invariant that the document describes the routes actually served; the fix (auth exports a paths
   fragment, `createOpenApiHandler` gains a `paths?` to merge) is purely additive.
 - **JWKS / RS256 verification** — unnecessary under direct exchange, as above.
+- **An Apple preset** — Apple's "client secret" isn't a stored string: it's a JWT signed ES256 with a
+  Team ID, a Key ID and a private key, expiring and needing rotation. Neither `_oidc_credentials`
+  (built for a static `clientSecret`) nor `ResolvedProvider` model that. A preset for it is a
+  self-contained addition (a signing module plus a fourth `PresetName`), deliberately left for its own
+  round rather than folded into this one.

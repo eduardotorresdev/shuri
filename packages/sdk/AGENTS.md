@@ -32,16 +32,18 @@ src/
      in through `options.handlers`, which prepends it.
 
 `buildCollections`/`buildGlobals` are driven by **the consumer's own tuple, not `core.collections`**.
-With auth on, the core also holds `users`, `_sessions` and `_accounts`; iterating it would put three
-keys on the runtime object that `AppCollections<T>` never declares. Those collections deliberately
-stay off `app.collections` anyway: `app.collections._sessions.insert(...)` would walk straight past
-every invariant a session has, and typed access goes through `app.auth`.
+With auth on, the core also holds `users`, `_sessions`, `_accounts` and `_oidc_credentials`; iterating
+it would put four keys on the runtime object that `AppCollections<T>` never declares. Those
+collections deliberately stay off `app.collections` anyway: `app.collections._sessions.insert(...)`
+would walk straight past every invariant a session has, and typed access goes through `app.auth`
+(`app.auth.oidcCredentials` for the OIDC one).
 
 `app.auth` is typed `A extends AuthConfig ? AuthApi : undefined`, with `A` naked so the conditional
 distributes: no `auth` gives `undefined`, an object literal gives `AuthApi`, and a variable typed
 `AuthConfig | undefined` gives `AuthApi | undefined`. `A` must **not** be `const`.
 
-A consumer collection reusing `users`/`_sessions`/`_accounts` throws `AuthSlugCollisionError`, which
+A consumer collection reusing `users`/`_sessions`/`_accounts`/`_oidc_credentials` throws
+`AuthSlugCollisionError`, which
 names the owner and suggests a rename plus a `relation` to `users` — rather than letting `createCore`
 report an opaque duplicate slug. Renaming the auth slugs per host was rejected: `authCollections`
 would stop being a constant and lose the literal slugs `InferCollection` reads.

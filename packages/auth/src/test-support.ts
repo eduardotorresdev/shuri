@@ -6,9 +6,9 @@ import { createPbkdf2Hasher } from "./password/pbkdf2.js";
 import type { PasswordHasher } from "./password/hasher.js";
 
 /**
- * A real `Store` over the three auth collections, backed by `@shuri/store-memory`. Real schema, real
+ * A real `Store` over the four auth collections, backed by `@shuri/store-memory`. Real schema, real
  * validation, real event bus — nothing about auth is worth testing against a fake store.
- * @returns A store declaring `users`, `_sessions` and `_accounts`.
+ * @returns A store declaring `users`, `_sessions`, `_accounts` and `_oidc_credentials`.
  */
 export function createAuthStore(): Store {
   return createStore(

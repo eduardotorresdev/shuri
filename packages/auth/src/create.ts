@@ -1,6 +1,6 @@
 import type { FallingHandler } from "@shuri/api";
 import type { CollectionSchema, GlobalSchema } from "@shuri/core";
-import type { RecordId } from "@shuri/store";
+import type { CollectionStore, RecordId, RecordInput } from "@shuri/store";
 import { AUTH_SLUGS } from "./collections.js";
 import {
   resolveAuthContext,
@@ -34,6 +34,14 @@ export interface AuthApi {
   getSession(request: Request): Promise<AuthSession | undefined>;
   /** Like `getSession`, but throws `UnauthenticatedError` instead of resolving to `undefined`. */
   requireSession(request: Request): Promise<AuthSession>;
+  /**
+   * The `_oidc_credentials` collection: one row per `OidcProviderSlot` declared in `providers`,
+   * holding the `clientId`/`clientSecret`/`redirectUri` (and, for `microsoft`, `tenant`) an admin
+   * fills in — that's what lets a preset be "configure the keys and it works" instead of a redeploy.
+   * `internal: true`, so this is the only way to reach it; wire it up behind the host's own
+   * authenticated admin route, never the public REST surface.
+   */
+  oidcCredentials: CollectionStore<RecordInput>;
   signUp(input: Credentials, meta?: SessionMetadata): Promise<IssuedSession>;
   signIn(input: Credentials, meta?: SessionMetadata): Promise<IssuedSession>;
   signOut(token: string): Promise<void>;
@@ -98,6 +106,7 @@ export function createAuth<
   return {
     handler: createAuthHandler(context),
     getSession,
+    oidcCredentials: context.oidcCredentials,
 
     async requireSession(request) {
       const session = await getSession(request);

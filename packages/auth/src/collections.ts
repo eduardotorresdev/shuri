@@ -90,8 +90,31 @@ export const accountsCollection = {
 } as const satisfies CollectionSchema;
 
 /**
- * The three collections auth needs, in declaration order — `users` first, since the other two carry
- * a `relation` to it.
+ * Credentials for a `OidcProviderSlot` — a provider whose preset and behavior are declared in code
+ * but whose `clientId`/`clientSecret`/`redirectUri` (and, for Microsoft, `tenant`) an admin fills in,
+ * one row per `provider` id. `internal: true`, same reasoning as `users`: there is no per-collection
+ * RBAC yet, so a served `_oidc_credentials` would let anyone read every configured `clientId` (and,
+ * absent `hidden`, every `clientSecret`) — a host reaches this collection through
+ * `AuthApi.oidcCredentials`, from its own authenticated admin route, not over the public REST surface.
+ */
+export const oidcCredentialsCollection = {
+  slug: "_oidc_credentials",
+  title: "OIDC Credentials",
+  singular: "OIDC Credential",
+  plural: "OIDC Credentials",
+  internal: true,
+  fields: [
+    { type: "text", name: "provider", required: true },
+    { type: "text", name: "clientId", required: true },
+    { type: "text", name: "clientSecret", hidden: true },
+    { type: "text", name: "redirectUri", required: true },
+    { type: "text", name: "tenant" },
+  ],
+} as const satisfies CollectionSchema;
+
+/**
+ * The four collections auth needs, in declaration order — `users` first, since the others carry a
+ * `relation` to it.
  *
  * A plain constant, not a factory: `InferCollection` reads the literal slugs off it, which is what
  * types `app.auth` and keeps `@shuri/sdk`'s merge a one-liner. Renaming these slugs per host would
@@ -101,6 +124,7 @@ export const authCollections = [
   usersCollection,
   sessionsCollection,
   accountsCollection,
+  oidcCredentialsCollection,
 ] as const;
 
 /** The slugs `@shuri/auth` claims, which a consumer's own collections must not reuse. */

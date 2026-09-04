@@ -91,11 +91,29 @@ export class OAuthTransactionError extends ApiError {
   }
 }
 
-/** No provider is configured under that id. */
+/**
+ * No provider is configured under that id — neither a static declaration nor a `OidcProviderSlot`,
+ * nor (for a slot) a matching `_oidc_credentials` row. The three cases are indistinguishable on
+ * purpose: from a caller's perspective a slot with no credentials yet isn't usable, which is exactly
+ * what "unknown" already means.
+ */
 export class UnknownProviderError extends ApiError {
   constructor(id: string) {
     super(404, `Unknown identity provider "${id}"`);
     this.name = "UnknownProviderError";
+  }
+}
+
+/**
+ * A `OidcProviderSlot` matched a `_oidc_credentials` row, but the row is missing a field its preset
+ * needs (e.g. `microsoft` without a `tenant`). Distinct from `UnknownProviderError`: an admin got far
+ * enough to create the row, so telling them what's still missing is a kindness, not an oracle — this
+ * never reaches an unauthenticated caller with something to learn from it.
+ */
+export class IncompleteOidcCredentialsError extends ApiError {
+  constructor(id: string, message: string) {
+    super(500, `Incomplete OIDC credentials for provider "${id}": ${message}`);
+    this.name = "IncompleteOidcCredentialsError";
   }
 }
 

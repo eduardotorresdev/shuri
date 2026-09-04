@@ -44,7 +44,7 @@ export interface CreateConfig<
   /** Options for the OpenAPI document/docs page exposed on `app.handler`. See `@shuri/api`'s `createOpenApiHandler`. */
   openapi?: CreateOpenApiHandlerOptions;
   /**
-   * Turns authentication on. Declaring it merges `@shuri/auth`'s three collections into the schema,
+   * Turns authentication on. Declaring it merges `@shuri/auth`'s four collections into the schema,
    * mounts its routes ahead of every built-in one, and exposes `app.auth`. Omitting it leaves the
    * app exactly as it was, `app.auth` included — which is `undefined`.
    */

@@ -78,5 +78,5 @@ src/
 `createCore` as the first step of `create()`. `@shuri/api` depends on this package for real (not just
 types): it calls `redact.ts`'s functions from its `visibility/` folder to enforce `hidden`/`internal`,
 and reads `Core`/`CollectionSchema`/`GlobalSchema`/`Field` to build the OpenAPI document — leaving the
-`createCore` call itself to `@shuri/sdk`. `@shuri/auth` declares its three collections as plain schema
+`createCore` call itself to `@shuri/sdk`. `@shuri/auth` declares its four collections as plain schema
 literals of this package.

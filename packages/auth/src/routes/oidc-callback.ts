@@ -1,7 +1,7 @@
 import { MethodNotAllowedError, toErrorResponse } from "@shuri/api";
 import type { AuthContext } from "../config.js";
 import { timingSafeEqual } from "../crypto/equal.js";
-import { OAuthTransactionError, OidcProviderError } from "../errors.js";
+import { OAuthTransactionError, OidcProviderError, UnknownProviderError } from "../errors.js";
 import { clearCookie, readCookie } from "../http/cookie.js";
 import { safeRedirect } from "../http/redirect.js";
 import { assertValidClaims, decodeIdToken } from "../oidc/id-token.js";
@@ -9,7 +9,7 @@ import { resolveOidcUser } from "../oidc/link.js";
 import { exchangeCode } from "../oidc/token.js";
 import { verifyTransaction } from "../oidc/transaction.js";
 import { requestMetadata } from "./metadata.js";
-import { requireProvider } from "./oidc-start.js";
+import { resolveProvider } from "./oidc-start.js";
 
 /**
  * `GET {basePath}/oidc/:provider/callback` — completes a sign-in: 302 to the app, with the session
@@ -42,7 +42,15 @@ export async function handleOidcCallback(
 ): Promise<Response> {
   if (request.method !== "GET") throw new MethodNotAllowedError(request.method);
 
-  const { oidc, provider } = requireProvider(context, providerId);
+  // Whether `providerId` names a declared provider at all is checked eagerly, ahead of the `try`,
+  // exactly like every other route: there is no transaction cookie yet to clear for "no such
+  // provider". Completing a *slot* from its `_oidc_credentials` row, though, happens inside the `try`
+  // below — that read can newly fail (row missing or incomplete) in a way a static provider never
+  // could, and the transaction cookie must still be cleared when it does.
+  const oidc = context.oidc;
+  if (!oidc || !(oidc.providers.has(providerId) || oidc.slots.has(providerId))) {
+    throw new UnknownProviderError(providerId);
+  }
   const clear = clearCookie(oidc.transactionCookie);
 
   try {
@@ -66,6 +74,7 @@ export async function handleOidcCallback(
     const code = url.searchParams.get("code");
     if (!code) throw new OidcProviderError("The callback carried no authorization code");
 
+    const provider = await resolveProvider(oidc, providerId, context.oidcCredentials);
     const endpoints = await oidc.discovery.endpoints(provider);
     const tokens = await exchangeCode(
       context.fetch,

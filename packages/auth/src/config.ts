@@ -13,10 +13,15 @@ import {
   type SessionService,
 } from "./sessions/store.js";
 import { AuthConfigError } from "./errors.js";
-import { oidcProvider } from "./oidc/config.js";
+import { oidcProvider, oidcProviderSlot } from "./oidc/config.js";
 import { createDiscovery, type Discovery } from "./oidc/discovery.js";
 import { MIN_SECRET_LENGTH, TRANSACTION_COOKIE_NAME } from "./oidc/transaction.js";
-import type { OidcProviderConfig, ResolvedProvider } from "./oidc/types.js";
+import {
+  isProviderSlot,
+  type OidcProviderSlot,
+  type ProviderDeclaration,
+  type ResolvedProvider,
+} from "./oidc/types.js";
 import type { Now } from "./types.js";
 import { createUserService, type UserService } from "./users/service.js";
 
@@ -54,8 +59,13 @@ export interface AuthConfig {
   fetch?: typeof fetch;
   /** Injectable clock, so expiry and renewal are testable. Defaults to `Date.now`. */
   now?: Now;
-  /** OIDC providers to offer. Declaring any of them makes `secret` mandatory. */
-  providers?: readonly OidcProviderConfig[];
+  /**
+   * OIDC providers to offer. Declaring any of them makes `secret` mandatory. Either a fully static
+   * `OidcProviderConfig` (its own `clientId`/`clientSecret`/`redirectUri`, resolved once at boot) or
+   * a `OidcProviderSlot` (`{ id, preset }`, resolved from `_oidc_credentials` on every sign-in — see
+   * `AuthApi.oidcCredentials`).
+   */
+  providers?: readonly ProviderDeclaration[];
 }
 
 /**
@@ -70,7 +80,10 @@ export type CollectionResolver<
 
 /** The OIDC half of the context, present only when the host declared a provider. */
 export interface OidcRuntime {
+  /** Fully static providers, resolved once at boot. */
   providers: Map<string, ResolvedProvider>;
+  /** DB-backed providers, resolved from `oidcCredentials` on every sign-in. */
+  slots: Map<string, OidcProviderSlot>;
   discovery: Discovery;
   secret: string;
   /** Options for the short-lived transaction cookie, scoped to the OIDC subtree. */
@@ -83,6 +96,8 @@ export interface AuthContext {
   users: UserService;
   sessions: SessionService;
   accounts: CollectionStore<RecordInput>;
+  /** The `_oidc_credentials` collection a `OidcProviderSlot` is completed from. */
+  oidcCredentials: CollectionStore<RecordInput>;
   credentials: CredentialsContext;
   cookies: SessionCookies;
   cookieOptions: ResolvedCookieOptions;
@@ -134,6 +149,7 @@ export function resolveAuthContext<
     users,
     sessions,
     accounts: collectionOf(resolver, "_accounts"),
+    oidcCredentials: collectionOf(resolver, "_oidc_credentials"),
     credentials: { users, sessions, hasher: config.hasher ?? createPbkdf2Hasher() },
     cookies: createSessionCookies(cookieOptions, now),
     cookieOptions,
@@ -178,13 +194,20 @@ function resolveOidc(
   }
 
   const providers = new Map<string, ResolvedProvider>();
+  const slots = new Map<string, OidcProviderSlot>();
   for (const provider of declared) {
-    const resolved = oidcProvider(provider);
-    providers.set(resolved.id, resolved);
+    if (isProviderSlot(provider)) {
+      const slot = oidcProviderSlot(provider);
+      slots.set(slot.id, slot);
+    } else {
+      const resolved = oidcProvider(provider);
+      providers.set(resolved.id, resolved);
+    }
   }
 
   return {
     providers,
+    slots,
     secret,
     discovery: createDiscovery(fetchImpl, now),
     transactionCookie: resolveCookieOptions(

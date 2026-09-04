@@ -4,6 +4,7 @@ import {
   matches,
   minLength,
   object,
+  oneOf,
   optional,
   refine,
   required,
@@ -12,12 +13,19 @@ import {
   type Validator,
 } from "@shuri/validate";
 import { OidcConfigError } from "../errors.js";
-import type { OidcEndpoints, OidcProviderConfig, ResolvedProvider } from "./types.js";
+import type {
+  OidcEndpoints,
+  OidcProviderConfig,
+  OidcProviderSlot,
+  PresetName,
+  ResolvedProvider,
+} from "./types.js";
 
 export const DEFAULT_SCOPES = ["openid", "email", "profile"] as const;
+const PRESET_NAMES: readonly PresetName[] = ["google", "microsoft"];
 
-// Travels in a URL path segment and is stored as `_accounts.provider`, so it stays to a shape that
-// needs no escaping anywhere.
+// Travels in a URL path segment and is stored as `_accounts.provider` and `_oidc_credentials.provider`,
+// so it stays to a shape that needs no escaping anywhere.
 const PROVIDER_ID = /^[a-z0-9][a-z0-9_-]*$/;
 
 const httpsUrl = (label: string): Validator<unknown> =>
@@ -42,6 +50,10 @@ const endpointsValidator: Validator<OidcEndpoints> = object<OidcEndpoints>({
   token: all(required('"token" is required'), httpsUrl("token")),
   userinfo: optional(httpsUrl("userinfo")),
 });
+
+// Both confidential-client methods authenticate with the secret — only where they put it differs
+// (an Authorization header vs. a body parameter). "none" is the public-client case: no secret at all.
+const REQUIRES_CLIENT_SECRET = new Set(["client_secret_basic", "client_secret_post"]);
 
 const providerValidator: Validator<OidcProviderConfig> = all(
   object<OidcProviderConfig>({
@@ -78,7 +90,8 @@ const providerValidator: Validator<OidcProviderConfig> = all(
   ),
   refine<OidcProviderConfig>(
     (config) =>
-      config.tokenAuthMethod !== "client_secret_basic" || Boolean(config.clientSecret),
+      !REQUIRES_CLIENT_SECRET.has(config.tokenAuthMethod as never) ||
+      Boolean(config.clientSecret),
     '"tokenAuthMethod" requires a "clientSecret"',
   ),
 );
@@ -110,4 +123,32 @@ export function oidcProvider(config: OidcProviderConfig): ResolvedProvider {
     allowLinkingByVerifiedEmail: config.allowLinkingByVerifiedEmail ?? true,
     fetchUserInfo: config.fetchUserInfo ?? false,
   };
+}
+
+const slotValidator: Validator<OidcProviderSlot> = object<OidcProviderSlot>({
+  id: all(
+    required('"id" is required'),
+    string('"id" must be a string'),
+    matches(PROVIDER_ID, '"id" must be lowercase letters, digits, "-" or "_"'),
+  ),
+  preset: all(
+    required('"preset" is required'),
+    oneOf(PRESET_NAMES, (value) => `"preset" must be one of ${PRESET_NAMES.join(", ")}, got "${value}"`),
+  ),
+  scopes: optional(
+    array<string>(required("a scope must not be empty")) as Validator<readonly string[]>,
+  ),
+});
+
+/**
+ * Validates a provider slot declaration — the behavior half of a DB-backed provider. Unlike
+ * `oidcProvider`, this never touches `clientId`/`clientSecret`/`redirectUri`: those are read from
+ * `_oidc_credentials` per request, by `resolveProviderSlot`.
+ * @param slot - The slot declaration.
+ * @returns The same slot, once it is known to be well-formed.
+ */
+export function oidcProviderSlot(slot: OidcProviderSlot): OidcProviderSlot {
+  const issues = validate(slot, slotValidator, `providers.${slot.id ?? ""}`);
+  if (issues.length > 0) throw new OidcConfigError(issues);
+  return slot;
 }

@@ -4,6 +4,7 @@ import { randomToken } from "../crypto/random.js";
 import { UnknownProviderError } from "../errors.js";
 import { serializeCookie } from "../http/cookie.js";
 import { buildAuthorizationUrl } from "../oidc/authorize.js";
+import { resolveProviderSlot } from "../oidc/credentials.js";
 import { createPkcePair } from "../oidc/pkce.js";
 import {
   signTransaction,
@@ -13,20 +14,46 @@ import {
 import type { ResolvedProvider } from "../oidc/types.js";
 
 /**
- * Resolves the provider named in the path, treating "no OIDC configured at all" and "no such
- * provider" as the same 404.
+ * Resolves `providerId` against the OIDC runtime, treating "no such provider" and "a declared slot
+ * with no `_oidc_credentials` row yet" as the same 404.
+ *
+ * A static provider was already validated and resolved at boot; a slot is completed from its
+ * `_oidc_credentials` row on every call — deliberately not cached alongside the statics, since an
+ * admin editing that row should take effect on the very next sign-in.
+ * @param oidc - The OIDC runtime.
+ * @param providerId - The provider id taken off the path.
+ * @param oidcCredentials - The `_oidc_credentials` collection a slot is completed from.
+ * @returns The resolved provider.
+ */
+export async function resolveProvider(
+  oidc: OidcRuntime,
+  providerId: string,
+  oidcCredentials: AuthContext["oidcCredentials"],
+): Promise<ResolvedProvider> {
+  const provider = oidc.providers.get(providerId);
+  if (provider) return provider;
+
+  const slot = oidc.slots.get(providerId);
+  if (!slot) throw new UnknownProviderError(providerId);
+
+  return resolveProviderSlot(slot, oidcCredentials);
+}
+
+/**
+ * `resolveProvider`, plus the "no OIDC configured at all" 404 it can't cover on its own since it
+ * takes the runtime, not the context. Used by the start route, which has no transaction cookie to
+ * clear yet either way, so resolving eagerly costs nothing.
  * @param context - The resolved auth context.
  * @param providerId - The provider id taken off the path.
  * @returns The OIDC runtime and the resolved provider.
  */
-export function requireProvider(
+export async function requireProvider(
   context: AuthContext,
   providerId: string,
-): { oidc: OidcRuntime; provider: ResolvedProvider } {
+): Promise<{ oidc: OidcRuntime; provider: ResolvedProvider }> {
   const oidc = context.oidc;
-  const provider = oidc?.providers.get(providerId);
-  if (!oidc || !provider) throw new UnknownProviderError(providerId);
-  return { oidc, provider };
+  if (!oidc) throw new UnknownProviderError(providerId);
+  return { oidc, provider: await resolveProvider(oidc, providerId, context.oidcCredentials) };
 }
 
 /**
@@ -45,7 +72,7 @@ export async function handleOidcStart(
 ): Promise<Response> {
   if (request.method !== "GET") throw new MethodNotAllowedError(request.method);
 
-  const { oidc, provider } = requireProvider(context, providerId);
+  const { oidc, provider } = await requireProvider(context, providerId);
   const endpoints = await oidc.discovery.endpoints(provider);
 
   const state = randomToken();

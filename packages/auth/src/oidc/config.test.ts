@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { OidcConfigError } from "../errors.js";
-import { oidcProvider } from "./config.js";
+import { oidcProvider, oidcProviderSlot } from "./config.js";
 import { googleProvider } from "./presets/google.js";
 
 const base = {
@@ -68,6 +68,36 @@ describe("oidcProvider", () => {
   it("refuses client_secret_basic without a secret", () => {
     expect(() =>
       oidcProvider({ ...base, tokenAuthMethod: "client_secret_basic" }),
+    ).toThrow(OidcConfigError);
+  });
+
+  it("refuses client_secret_post without a secret too", () => {
+    expect(() =>
+      oidcProvider({ ...base, tokenAuthMethod: "client_secret_post" }),
+    ).toThrow(OidcConfigError);
+    expect(() =>
+      oidcProvider({ ...base, tokenAuthMethod: "client_secret_post", clientSecret: "s3cret" }),
+    ).not.toThrow();
+  });
+});
+
+describe("oidcProviderSlot", () => {
+  it("accepts a bare id + preset declaration", () => {
+    expect(oidcProviderSlot({ id: "google", preset: "google" })).toEqual({
+      id: "google",
+      preset: "google",
+    });
+  });
+
+  it("refuses an unknown preset", () => {
+    expect(() =>
+      oidcProviderSlot({ id: "acme", preset: "acme" as never }),
+    ).toThrow(OidcConfigError);
+  });
+
+  it("refuses an id that wouldn't survive a URL path segment", () => {
+    expect(() =>
+      oidcProviderSlot({ id: "Google Inc", preset: "google" }),
     ).toThrow(OidcConfigError);
   });
 });
