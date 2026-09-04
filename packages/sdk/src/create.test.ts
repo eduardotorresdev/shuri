@@ -191,3 +191,80 @@ describe("app subscriptions", () => {
     expect(names).toEqual(["Acme"]);
   });
 });
+
+describe("create with auth", () => {
+  function authApp() {
+    return create({
+      collections,
+      adapter: createMemoryAdapter(),
+      auth: { cookie: { secure: false } },
+      realtime: { heartbeatMs: 0 },
+    });
+  }
+
+  it("exposes app.auth and leaves app.collections to the consumer's own slugs", () => {
+    const app = authApp();
+
+    expect(Object.keys(app.collections)).toEqual(["posts"]);
+    expect(app.auth.getSession).toBeTypeOf("function");
+  });
+
+  it("is undefined without an auth config, at runtime and in the type", () => {
+    const app = create({ collections, adapter: createMemoryAdapter() });
+
+    expect(app.auth).toBeUndefined();
+    // @ts-expect-error — `app.auth` is `undefined` here, so it has no members to reach for.
+    expect(() => app.auth.getSession).toThrow();
+  });
+
+  it("serves the auth routes ahead of every built-in one", async () => {
+    const app = authApp();
+
+    const signup = await app.handler(
+      new Request("http://localhost/auth/signup", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          email: "ada@example.com",
+          password: "correct-horse-battery",
+        }),
+      }),
+    );
+
+    expect(signup.status).toBe(201);
+    expect(await signup.json()).toMatchObject({ user: { email: "ada@example.com" } });
+  });
+
+  it("keeps the auth collections off HTTP while auth itself uses them", async () => {
+    const app = authApp();
+    await app.auth.signUp({
+      email: "ada@example.com",
+      password: "correct-horse-battery",
+    });
+
+    const users = await app.handler(new Request("http://localhost/collections/users"));
+    const unknown = await app.handler(new Request("http://localhost/collections/nope"));
+
+    expect(users.status).toBe(404);
+    expect(await users.json()).toEqual({ error: 'Unknown collection "users"' });
+    expect(await unknown.json()).toEqual({ error: 'Unknown collection "nope"' });
+  });
+
+  it("refuses a consumer collection reusing a slug @shuri/auth owns", () => {
+    expect(() =>
+      create({
+        collections: [
+          {
+            slug: "users",
+            title: "Users",
+            singular: "User",
+            plural: "Users",
+            fields: [{ type: "text", name: "name" }],
+          },
+        ] as const,
+        adapter: createMemoryAdapter(),
+        auth: {},
+      }),
+    ).toThrow(/reserved by @shuri\/auth/);
+  });
+});

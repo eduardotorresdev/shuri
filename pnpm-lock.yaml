@@ -52,6 +52,34 @@ importers:
         specifier: ^3.2.4
         version: 3.2.7(@types/node@22.20.1)
 
+  packages/auth:
+    dependencies:
+      '@shuri/api':
+        specifier: workspace:*
+        version: link:../api
+      '@shuri/core':
+        specifier: workspace:*
+        version: link:../core
+      '@shuri/store':
+        specifier: workspace:*
+        version: link:../store
+      '@shuri/validate':
+        specifier: workspace:*
+        version: link:../validate
+    devDependencies:
+      '@shuri/config':
+        specifier: workspace:*
+        version: link:../config
+      '@shuri/store-memory':
+        specifier: workspace:*
+        version: link:../store-memory
+      '@types/node':
+        specifier: ^22.13.1
+        version: 22.20.1
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.7(@types/node@22.20.1)
+
   packages/config: {}
 
   packages/core:
@@ -91,6 +119,9 @@ importers:
       '@shuri/api':
         specifier: workspace:*
         version: link:../api
+      '@shuri/auth':
+        specifier: workspace:*
+        version: link:../auth
       '@shuri/core':
         specifier: workspace:*
         version: link:../core
