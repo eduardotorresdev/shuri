@@ -51,7 +51,15 @@ src/
   never fails the write — the error is rethrown in a microtask instead.
 - **validate-record.ts** — `assertValidRecord` calls `validateRecord` from `@shuri/core` and throws
   `RecordValidationError` if there are issues; it's the guard run inside every `insert`/`update`.
-- **collections/store.ts** — `CollectionStore`: `findMany`, `findOne`, `get` (throws
+- **The store is the complete view.** `CollectionStore`/`GlobalStore` each carry the `schema` they
+  were bound to — `hidden` fields and `internal` collections included — and **never apply either
+  flag**: both are HTTP-surface metadata, applied by `@shuri/api`'s `visibility/` folder. A hidden
+  field is readable and writable from here, and an internal collection behaves like any other. The
+  `schema` property exists so the HTTP layer can read that metadata off the very store it was handed,
+  instead of being passed a `Core` or a precomputed map it could be built without. It is **mandatory,
+  not optional**, for the same reason: an optional property fails open, and failing open here means
+  serving a password hash with no error at all.
+- **collections/store.ts** — `CollectionStore`: `schema`, `findMany`, `findOne`, `get` (throws
   `RecordNotFoundError` when `findOne` would return `undefined`), `count`, `insert`, `update`
   (partial), `delete`, plus `subscribe(listener)` (the whole collection) and `subscribe(id, listener)`
   (updates/deletes of one record; never a create). Every write emits **after** the adapter resolves
@@ -60,7 +68,7 @@ src/
   the event means "a delete was accepted", not "a record stopped existing", and carries no pre-image.
 - **collections/query.ts** — the filter/sort/pagination AST (`FilterOp`: eq/ne/gt/gte/lt/lte/in/
   contains) every adapter receives and translates into its own native query language.
-- **globals/store.ts** — `GlobalStore`: `get`/`update` plus `subscribe(listener)` for this global's
+- **globals/store.ts** — `GlobalStore`: `schema`, `get`/`update` plus `subscribe(listener)` for this global's
   updates; `get()` always resolves, to `{}` before the first `update`. `update` emits under the same
   rule as the collection writes above.
 

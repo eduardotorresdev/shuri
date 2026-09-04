@@ -27,12 +27,38 @@ const others: CollectionSchema = {
   fields: [{ type: "text", name: "name", required: true }],
 };
 
+const secrets: CollectionSchema = {
+  slug: "secrets",
+  title: "Secrets",
+  singular: "Secret",
+  plural: "Secrets",
+  internal: true,
+  fields: [
+    { type: "text", name: "name", required: true },
+    { type: "text", name: "token", hidden: true },
+  ],
+};
+
 describe("CollectionStore", () => {
   let collection: CollectionStore;
 
   beforeEach(() => {
     const core = createCore({ collections: [services] });
     collection = createStore(core, createFakeAdapter()).collection("services");
+  });
+
+  it("exposes the schema it was bound to, hidden and internal metadata included", () => {
+    expect(collection.schema).toBe(services);
+  });
+
+  it("is the complete view: a hidden field is readable and writable from here", async () => {
+    const core = createCore({ collections: [secrets] });
+    const store = createStore(core, createFakeAdapter()).collection("secrets");
+
+    const record = await store.insert({ name: "Ada", token: "s3cret" });
+
+    expect(record.token).toBe("s3cret");
+    expect(await store.findOne(record.id)).toMatchObject({ token: "s3cret" });
   });
 
   it("inserts a record and assigns it an id", async () => {

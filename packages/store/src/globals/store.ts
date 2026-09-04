@@ -5,8 +5,14 @@ import type { GlobalEvent, StoreEventListener, Unsubscribe } from "../events/typ
 import type { RecordInput } from "../record.js";
 import { assertValidRecord } from "../validate-record.js";
 
-/** Persistence operations scoped to a single global: get and update the one record. */
+/**
+ * Persistence operations scoped to a single global: get and update the one record. Like
+ * `CollectionStore`, this is the complete view: it carries `schema` (`hidden` fields included) and
+ * never applies the flag itself.
+ */
 export interface GlobalStore<R = RecordInput> {
+  /** The schema this store was bound to, so the HTTP layer can read visibility metadata off it. */
+  readonly schema: GlobalSchema;
   /** Always resolves — to `{}` until the first `update`. */
   get(): Promise<R>;
   update(data: Partial<R>): Promise<R>;
@@ -29,6 +35,7 @@ export function bindGlobal(
   events: StoreEventBus,
 ): GlobalStore {
   return {
+    schema: global,
     async get() {
       const record = await adapter.findGlobal(global);
       return record ?? {};

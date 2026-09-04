@@ -24,6 +24,12 @@ const seoDefaults: GlobalSchema = {
 };
 
 describe("GlobalStore", () => {
+  it("exposes the schema it was bound to", () => {
+    const core = createCore({ collections: [], globals: [siteSettings] });
+    const store = createStore(core, createFakeAdapter());
+    expect(store.global("site").schema).toBe(siteSettings);
+  });
+
   it("returns an empty object before the first update", async () => {
     const core = createCore({ collections: [], globals: [siteSettings] });
     const store = createStore(core, createFakeAdapter());

@@ -25,8 +25,21 @@ export interface CollectionSubscribe<R = RecordInput> {
   (id: RecordId, listener: StoreEventListener<RecordEvent<R>>): Unsubscribe;
 }
 
-/** Persistence operations scoped to a single collection. */
+/**
+ * Persistence operations scoped to a single collection.
+ *
+ * **This store is the complete view.** It carries `schema` — `hidden` fields and `internal`
+ * collections included — and never applies either flag: both are HTTP-surface metadata, applied by
+ * `@shuri/api`'s `visibility/` layer. A hidden field is readable and writable from here, and an
+ * internal collection behaves exactly like any other.
+ */
 export interface CollectionStore<R = RecordInput> {
+  /**
+   * The schema this store was bound to, so the HTTP layer can read visibility metadata off the
+   * store it was handed. Mandatory rather than optional: an optional property would let a caller
+   * that forgot it serve a hidden field with no error at all.
+   */
+  readonly schema: CollectionSchema;
   findMany(query?: Query): Promise<StoreRecord<R>[]>;
   findOne(id: RecordId): Promise<StoreRecord<R> | undefined>;
   /** Throws `RecordNotFoundError` when the record doesn't exist, like `findOne` returns `undefined`. */
@@ -82,6 +95,7 @@ export function bindCollection(
   };
 
   return {
+    schema: collection,
     findMany: (query) => adapter.findMany(collection, query),
     findOne: (id) => adapter.findOne(collection, id),
     async get(id) {
