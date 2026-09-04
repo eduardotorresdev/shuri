@@ -1,4 +1,5 @@
 export * from "./create.js";
+export * from "./sveltekit.js";
 export type {
   AuthApi,
   AuthConfig,
