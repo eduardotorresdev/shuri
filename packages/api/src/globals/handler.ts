@@ -1,5 +1,6 @@
 import type { CollectionSchema, GlobalSchema } from "@shuri/core";
 import type { GlobalStore, RecordInput, Store } from "@shuri/store";
+import { publicGlobal } from "../visibility/public-global.js";
 import { MethodNotAllowedError } from "../errors.js";
 import { readJsonBody } from "../utils/request.js";
 import { jsonResponse, toErrorResponse } from "../utils/response.js";
@@ -26,6 +27,9 @@ export interface CreateGlobalsApiHandlerOptions {
  *   GET   {basePath}/:slug   read the global's record
  *   PATCH {basePath}/:slug   update it (merge)
  *
+ * A field declared `hidden` never appears in a response and can't be written (see
+ * `visibility/public-global.ts`).
+ *
  * Returns `undefined` for anything outside `basePath`, so it composes with `createApiHandler` and
  * `createOpenApiHandler` by falling through (see `@shuri/sdk`'s `create()`).
  * @param app - The `{ store }` exposing every global to serve.
@@ -44,7 +48,9 @@ export function createGlobalsApiHandler<G extends readonly GlobalSchema[]>(
     if (!route) return undefined;
 
     try {
-      const global = app.store.global(route.slug as never) as GlobalStore<RecordInput>;
+      const global = publicGlobal(
+        app.store.global(route.slug as never) as GlobalStore<RecordInput>,
+      );
 
       switch (request.method) {
         case "GET":

@@ -24,22 +24,34 @@ export const siteSettingsSchema: GlobalSchema = {
 };
 
 /**
- * Fake `{ store }` declaring one "services" collection and one "site" global, over a real
- * `createEventBus` — faking a four-line bus would buy nothing and would stop the tests from
- * exercising the delivery the handler depends on.
+ * Fake `{ store }` declaring the given collections and globals (one "services" collection and one
+ * "site" global by default), over a real `createEventBus` — faking a four-line bus would buy
+ * nothing and would stop the tests from exercising the delivery the handler depends on. Each
+ * resolved store carries its `schema`, like a real one, so the visibility layer can read it.
+ * @param [collections] - The collection schemas the fake store resolves.
+ * @param [globals] - The global schemas the fake store resolves.
  * @returns A fake realtime app, with its bus exposed for tests to emit on.
  */
-export function createFakeRealtimeApp(): RealtimeApp {
+export function createFakeRealtimeApp(
+  collections: readonly CollectionSchema[] = [servicesSchema],
+  globals: readonly GlobalSchema[] = [siteSettingsSchema],
+): RealtimeApp {
   const events = createEventBus();
+  const collectionsBySlug = new Map(
+    collections.map((schema) => [schema.slug, { schema }]),
+  );
+  const globalsBySlug = new Map(globals.map((schema) => [schema.slug, { schema }]));
   const store = {
     events,
     collection: (slug: string) => {
-      if (slug !== servicesSchema.slug) throw new UnknownCollectionError(slug);
-      return {};
+      const collection = collectionsBySlug.get(slug);
+      if (!collection) throw new UnknownCollectionError(slug);
+      return collection;
     },
     global: (slug: string) => {
-      if (slug !== siteSettingsSchema.slug) throw new UnknownGlobalError(slug);
-      return {};
+      const global = globalsBySlug.get(slug);
+      if (!global) throw new UnknownGlobalError(slug);
+      return global;
     },
   } as unknown as Store;
   return { store };

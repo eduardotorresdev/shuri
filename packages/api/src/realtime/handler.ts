@@ -5,6 +5,8 @@ import { eventStreamResponse, toErrorResponse } from "../utils/response.js";
 import { matchesSelection } from "./filter.js";
 import { toEventFrame } from "./frame.js";
 import { parseEventQuery, type EventSelection } from "./query.js";
+import { servableCollection } from "../visibility/internal.js";
+import { publicEvent } from "../visibility/public-event.js";
 import { matchRealtimeRoute } from "./routes.js";
 
 /**
@@ -39,7 +41,9 @@ function assertKnownSlugs<
   T extends readonly CollectionSchema[],
   G extends readonly GlobalSchema[],
 >(store: RealtimeApp<T, G>["store"], selection: EventSelection): void {
-  for (const slug of selection.collection ?? []) store.collection(slug as never);
+  // Through `servableCollection`, so selecting an `internal` collection 404s exactly like selecting
+  // one that was never declared.
+  for (const slug of selection.collection ?? []) servableCollection(store, slug);
   for (const slug of selection.global ?? []) store.global(slug as never);
 }
 
@@ -52,6 +56,9 @@ function assertKnownSlugs<
  * One parameterized endpoint rather than a route per resource: a browser caps HTTP/1.1 connections
  * per origin at around six, so a CMS UI watching a handful of resources needs the filtering to
  * happen server-side, over a single connection. No params streams everything.
+ *
+ * Events of a collection declared `internal` never reach the stream, and a field declared `hidden`
+ * is stripped from every frame (see `visibility/public-event.ts`).
  *
  * Returns `undefined` for anything outside `basePath`, so it composes with the other handlers by
  * falling through (see `@shuri/sdk`'s `create()`), same as `globals/handler.ts` and `docs/handler.ts`.
@@ -82,8 +89,11 @@ export function createRealtimeHandler<
       // teardown `eventStreamResponse` expects: a disconnect unsubscribes, with no glue in between.
       return eventStreamResponse(
         (send) =>
-          app.store.events.subscribe((event) => {
-            if (matchesSelection(event, selection)) send(toEventFrame(event));
+          app.store.events.subscribe((rawEvent) => {
+            // `publicEvent` first, and it returns one thing: an event of an `internal` collection is
+            // dropped and a `hidden` field stripped in a single step there's no way to half-apply.
+            const event = publicEvent(app.store, rawEvent);
+            if (event && matchesSelection(event, selection)) send(toEventFrame(event));
           }),
         { signal: request.signal, heartbeatMs: options.heartbeatMs },
       );

@@ -1,4 +1,4 @@
-import type { CollectionSchema, GlobalSchema } from "@shuri/core";
+import { servableCollections, type CollectionSchema, type GlobalSchema } from "@shuri/core";
 import { collectionSchema, globalSchema, type JsonSchema } from "./json-schema.js";
 import { collectionPaths } from "./paths/collections.js";
 import { globalPaths } from "./paths/globals.js";
@@ -49,7 +49,10 @@ export function buildOpenApiDocument(
   const paths: Record<string, Record<string, unknown>> = {};
   const schemas: Record<string, JsonSchema> = {};
 
-  for (const collection of collections) {
+  // Collections declared `internal` aren't served, so describing them would promise routes that
+  // 404. Filtering here drops their paths and their `components.schemas` entry together, leaving no
+  // dangling `$ref` behind.
+  for (const collection of servableCollections(collections)) {
     Object.assign(paths, collectionPaths(collection, basePath));
     schemas[collection.slug] = collectionSchema(collection);
   }

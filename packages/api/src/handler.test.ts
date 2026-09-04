@@ -100,3 +100,37 @@ describe("createHandler", () => {
     expect(document.paths["/documented/services"]).toBeDefined();
   });
 });
+
+describe("createHandler options.handlers", () => {
+  it("tries the given handlers before every built-in one", async () => {
+    const handler = buildHandler({
+      handlers: [
+        async (request) =>
+          new URL(request.url).pathname === "/auth/me"
+            ? new Response("mine", { status: 200 })
+            : undefined,
+      ],
+    });
+
+    const response = await handler(new Request("http://localhost/auth/me"));
+    expect(await response.text()).toBe("mine");
+  });
+
+  it("lets them shadow a built-in route, since a guard is only a guard if it runs first", async () => {
+    const handler = buildHandler({
+      handlers: [async () => new Response(null, { status: 401 })],
+    });
+
+    const response = await handler(new Request("http://localhost/collections/services"));
+    expect(response.status).toBe(401);
+  });
+
+  it("falls through to the built-in handlers when they all decline", async () => {
+    const handler = buildHandler({
+      handlers: [async () => undefined],
+    });
+
+    const response = await handler(new Request("http://localhost/collections/services"));
+    expect(response.status).toBe(200);
+  });
+});

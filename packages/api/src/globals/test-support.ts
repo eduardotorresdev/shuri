@@ -14,10 +14,19 @@ export const siteSettingsSchema: GlobalSchema = {
   fields: [{ type: "text", name: "name", required: true }],
 };
 
-export function createFakeGlobalStore(): GlobalStore<RecordInput> {
+/**
+ * In-memory `GlobalStore` test double bound to `schema`, carried like a real one so the
+ * `visibility/` layer can read its `hidden` flags off it.
+ * @param [schema] - The schema the fake store is bound to.
+ * @returns A fake `GlobalStore` over one in-memory record.
+ */
+export function createFakeGlobalStore(
+  schema: GlobalSchema = siteSettingsSchema,
+): GlobalStore<RecordInput> {
   let record: RecordInput = {};
 
   return {
+    schema,
     subscribe: () => () => {},
     async get() {
       return record;
@@ -39,7 +48,7 @@ export function createFakeGlobalsApp(
 ): { store: Store } {
   const store = {
     global: (slug: string) => {
-      if (slug !== "site") throw new UnknownGlobalError(slug);
+      if (slug !== global.schema.slug) throw new UnknownGlobalError(slug);
       return global;
     },
   } as unknown as Store;

@@ -62,6 +62,9 @@ export function collectionSchema(collection: CollectionSchema): JsonSchema {
   const required: string[] = [];
 
   for (const field of collection.fields) {
+    // A hidden field is neither returned nor accepted, so the document must not mention it — and it
+    // must not be listed as required either, or every generated client would send it.
+    if (field.hidden) continue;
     properties[field.name] = fieldSchema(field);
     if (field.required) required.push(field.name);
   }
@@ -78,6 +81,7 @@ export function globalSchema(global: GlobalSchema): JsonSchema {
   const required: string[] = [];
 
   for (const field of global.fields) {
+    if (field.hidden) continue;
     properties[field.name] = fieldSchema(field);
     if (field.required) required.push(field.name);
   }

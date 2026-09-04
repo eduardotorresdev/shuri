@@ -1,10 +1,15 @@
 import type { CollectionSchema } from "@shuri/core";
-import type { CollectionStore, RecordInput, Store } from "@shuri/store";
+import type { Store } from "@shuri/store";
 import { MethodNotAllowedError } from "../errors.js";
 import { readJsonBody } from "../utils/request.js";
 import { jsonResponse, noContentResponse, toErrorResponse } from "../utils/response.js";
 import { UnknownRouteError } from "./errors.js";
 import { parseQuery } from "./query.js";
+import { servableCollection } from "../visibility/internal.js";
+import {
+  publicCollection,
+  type PublicCollection,
+} from "../visibility/public-collection.js";
 import { matchCollectionRoute } from "./routes.js";
 
 /**
@@ -35,6 +40,10 @@ export interface CreateApiHandlerOptions {
  * Framework-agnostic by design: it only touches `Request`/`Response`, so Deno/Bun can serve it
  * directly, Hono can forward `c.req.raw` to it, and a thin per-engine adapter covers the rest.
  *
+ * A collection declared `internal` isn't served at all: the request 404s exactly as it would for a
+ * slug no collection declares (see `visibility/internal.ts`), and a field declared `hidden` never
+ * appears in a response and can't be written or queried (see `visibility/public-collection.ts`).
+ *
  * Record validation happens in `@shuri/store`'s `insert`/`update`, which already guard every write
  * against the collection's declared fields (so does `@shuri/sdk`, since both go through the same
  * `CollectionStore`), throwing `RecordValidationError` on a bad body. This handler's job is to
@@ -55,9 +64,9 @@ export function createApiHandler<T extends readonly CollectionSchema[]>(
       const route = matchCollectionRoute(url.pathname, basePath);
       if (!route) throw new UnknownRouteError();
 
-      const collection = app.store.collection(
-        route.slug as never,
-      ) as CollectionStore<RecordInput>;
+      // `servableCollection` is what applies `internal`, and `publicCollection` what applies
+      // `hidden`: from here down, no unredacted view of the collection exists to forget about.
+      const collection = publicCollection(servableCollection(app.store, route.slug));
       return await (route.id
         ? handleRecord(request, collection, route.id)
         : handleCollection(request, collection, url));
@@ -69,7 +78,7 @@ export function createApiHandler<T extends readonly CollectionSchema[]>(
 
 async function handleCollection(
   request: Request,
-  collection: CollectionStore<RecordInput>,
+  collection: PublicCollection,
   url: URL,
 ): Promise<Response> {
   switch (request.method) {
@@ -86,7 +95,7 @@ async function handleCollection(
 
 async function handleRecord(
   request: Request,
-  collection: CollectionStore<RecordInput>,
+  collection: PublicCollection,
   id: string,
 ): Promise<Response> {
   switch (request.method) {

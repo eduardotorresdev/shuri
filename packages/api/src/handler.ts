@@ -13,6 +13,7 @@ import {
   createRealtimeHandler,
   type CreateRealtimeHandlerOptions,
 } from "./realtime/handler.js";
+import type { FallingHandler } from "./falling.js";
 
 /** Everything the composed handler serves from: the declared schema and the store backing it. */
 export interface HandlerApp<
@@ -24,6 +25,12 @@ export interface HandlerApp<
 }
 
 export interface CreateHandlerOptions {
+  /**
+   * Extra falling handlers, tried **before** every built-in one. Prepended rather than appended
+   * because each built-in handler is relocatable through its own `basePath`, so a collision is the
+   * consumer's to resolve — while a guard (an auth handler, say) is only a guard if it runs first.
+   */
+  handlers?: readonly FallingHandler[];
   /** Options for the collections REST routes. See `createApiHandler`. */
   api?: CreateApiHandlerOptions;
   /** Options for the globals REST routes. See `createGlobalsApiHandler`. */
@@ -38,6 +45,8 @@ export interface CreateHandlerOptions {
  * Composes this package's four handlers into the single `fetch` handler serving an app's whole HTTP
  * surface: the OpenAPI document and docs page, the event stream, the globals routes and the
  * collections routes.
+ *
+ * `options.handlers` are tried before all of them, so a handler that must guard the rest can.
  *
  * The order is exact-path matchers first, prefix matchers next, terminal handler last: `openapi` and
  * `realtime` each match one path, `globals`/`collections` match everything under their base path,
@@ -57,7 +66,8 @@ export function createHandler<
   app: HandlerApp<T, G>,
   options: CreateHandlerOptions = {},
 ): (request: Request) => Promise<Response> {
-  const falling = [
+  const falling: FallingHandler[] = [
+    ...(options.handlers ?? []),
     createOpenApiHandler(app, {
       basePath: options.api?.basePath,
       globalsBasePath: options.globalsApi?.basePath,

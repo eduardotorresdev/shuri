@@ -1,4 +1,5 @@
 export * from "./errors.js";
+export * from "./falling.js";
 export * from "./handler.js";
 export * from "./utils/request.js";
 export * from "./utils/response.js";
@@ -14,5 +15,11 @@ export * from "./realtime/frame.js";
 export * from "./realtime/handler.js";
 export * from "./realtime/query.js";
 export * from "./realtime/routes.js";
+export * from "./visibility/errors.js";
+export * from "./visibility/guards.js";
+export * from "./visibility/internal.js";
+export * from "./visibility/public-collection.js";
+export * from "./visibility/public-event.js";
+export * from "./visibility/public-global.js";
 export * from "./docs/openapi.js";
 export * from "./docs/handler.js";

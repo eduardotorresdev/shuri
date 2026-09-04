@@ -11,6 +11,7 @@ adapter (Node, Hono, ...). Depends solely on `@shuri/store` and `@shuri/validate
 src/
   index.ts                    re-exports everything below
   errors.ts                    ApiError base, IssuesApiError, MethodNotAllowedError, InvalidJsonBodyError
+  falling.ts                   FallingHandler: the "answer or return undefined" contract, as a leaf module
   handler.ts                   createHandler: composes the four handlers below into one
   utils/
     request.ts                  readJsonBody: parses the request body, throws InvalidJsonBodyError
@@ -35,6 +36,15 @@ src/
     errors.ts                    InvalidEventQueryError
     test-support.ts              fake app over a real bus, readEvents
     test/events.test.ts          integration test
+  visibility/
+    guards.ts                    assertWritableRecord/assertQueryableFields, over @shuri/core's redact.ts
+    errors.ts                    HiddenFieldError (400)
+    internal.ts                  servableCollection: resolves a slug, throwing for an internal one
+    public-collection.ts         PublicCollection/publicCollection
+    public-global.ts             PublicGlobal/publicGlobal
+    public-event.ts              publicEvent: event -> streamable event, or undefined
+    test-support.ts              schemas declaring hidden fields / internal collections
+    test/visibility.test.ts      integration test
   docs/
     openapi.ts                   buildOpenApiDocument: assembles the full OpenAPI 3.1 document
     json-schema.ts               fieldSchema/collectionSchema/globalSchema (Field -> JSON Schema)
@@ -80,12 +90,47 @@ src/
   fields). A collection's `id` is `readOnly`, since the store generates it and rejects a payload
   carrying one. The event union stays out of `components.schemas` on purpose: its keys are raw user
   slugs, so any added name could collide with one.
+- **visibility/** — a folder rather than scattered calls, so that `ls src/visibility` answers, in
+  full, "where is `hidden` applied, and did we miss a path?". `@shuri/core` declares `hidden` (a
+  field) and `internal` (a collection), validates them, and defines what they mean
+  (`hiddenFieldNames`/`redactRecord`/`redactRecords`/`servableCollections`, in its own `redact.ts`);
+  this folder is where they are _enforced_, importing those functions rather than redefining them —
+  so a future consumer of `@shuri/core` outside this package shares the exact same definition.
+  - `redactRecord` (in `@shuri/core`) **copies, never mutates**: an adapter may hand out the live
+    object it stores (`createMemoryAdapter` does), so deleting a key would erase the value from the
+    store for good.
+  - `servableCollection` throws `@shuri/store`'s own `UnknownCollectionError` for an `internal`
+    collection — the same class, message and body an undeclared slug produces. That identity is the
+    point: probing `/collections/_sessions` must teach nothing.
+  - `publicCollection`/`publicGlobal` return a **narrower interface** (only the operations REST
+    exposes; no `findOne`/`count`/`subscribe`/`schema`), so a handler holding one has no unredacted
+    path available. Redacting inside each `jsonResponse` would work right up to the first of the four
+    call sites somebody forgets.
+  - `publicEvent` returns **one thing** (`StoreEvent | undefined`) rather than a filter plus a
+    mapper: a two-part contract can be applied half-way, and half-applied here means streaming a
+    password hash to every connected client.
+  - A `hidden` field is **not writable over HTTP — it is a 400**, not a silent drop: `PATCH
+{"passwordHash": ...}` would otherwise be an authentication bypass, and a caller who believes it
+    changed a password and didn't has an incident with no log line. `rejectsId` one layer down sets
+    the same precedent. Filtering and sorting by a hidden field is refused for the same reason: a
+    `contains` filter reads a redacted value back one guess at a time. The cost is that "what may be
+    written" is now expressed in two layers (core validates the shape, this decides the visibility),
+    mitigated by both deriving from the one flag.
+- **falling.ts** — `FallingHandler`, in its own leaf module because `handler.ts` imports
+  `globals/handler.ts`: a package that needs the type but must not be imported _by_ `createHandler`
+  (`@shuri/auth`) takes it from here with no cycle. `CreateHandlerOptions.handlers` are **prepended**
+  to the chain: every built-in handler is relocatable through its own `basePath`, so a collision is
+  the consumer's to resolve, while a guard is only a guard if it runs first.
 - **utils/response.ts#toErrorResponse** — the single place that maps known errors (from
   `@shuri/store` and this package) to HTTP status codes; unrecognized errors are rethrown to surface
-  as a 500 (or crash) at the hosting engine's own error boundary.
+  as a 500 (or crash) at the hosting engine's own error boundary. It branches on `IssuesApiError` /
+  `ApiError` — inheritance, not a registry of concrete classes — which is why `@shuri/auth` can add a
+  dozen errors without this file changing, and why the import edge stays `auth -> api`.
 
 ## Role in the monorepo
 
 `@shuri/sdk`'s `create()` just calls `createHandler` for `app.handler`; the composition itself lives
-here, next to the handlers it orders. `@shuri/demo` reaches this package only indirectly,
+here, next to the handlers it orders — which is also why an extra handler arrives through
+`options.handlers` rather than by `@shuri/sdk` wrapping the composed handler, since wrapping can only
+ever express "outermost". `@shuri/demo` reaches this package only indirectly,
 through `@shuri/sdk`.
