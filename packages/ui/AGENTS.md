@@ -67,8 +67,11 @@ src/
       IssueSummary.svelte         the error banner
     lists/
       RecordTable.svelte         collection -> a sortable table
-      Pager.svelte                offset paging
-      columns.ts                   listColumns/isSortable
+      ListFilters.svelte          the filter bar: chips, and the panel behind them
+      FilterControl.svelte         a field's type -> the control that filters it
+      Pager.svelte                  offset paging
+      columns.ts                     listColumns/isSortable
+      filters.ts                      filterOps/filterFields/readFilters/formFilters/toWhere
     auth/
       AuthCard.svelte            the cream page and white card the three signed-out screens share
       SetupScreen.svelte          the first-account form, shown while no account exists
@@ -200,10 +203,26 @@ src/
   advertises, turning a non-2xx into an `AdminRequestError` carrying `issues`. `fetchAdminSchema` is
   separate because it produces `createAdminClient`'s argument: the schema names the paths, so the
   data client can't exist before it has been read.
+- **lib/lists/filters.ts** — which fields a list can be filtered by, and the whole round trip
+  between a URL, the filter form and the store's `Where`. The operators are chosen per field type —
+  `contains` on prose, the six comparisons on a number, `eq` on a closed set — and a multi-valued
+  field gets none, since every operator compares against a single value and a filter on a stored
+  list would quietly match nothing. `isValidFilter` is the one gate: a hand-edited URL, an empty box
+  and a select left on "todos" all fail it and are dropped rather than queried with, because the
+  store would answer `readingMinutes = "abc"` with an empty list an author reads as "no records".
+  Composed from `@shuri/validate` (`object`/`oneOf`/`refine`), like every other schema-shaped check
+  in the repo.
+- **lib/lists/ListFilters.svelte** — the applied filters as chips, and the panel that edits them.
+  The panel is a real `<form>` and its controls are uncontrolled: what the author types lives in the
+  DOM until submit, so there is no draft state to keep in sync with the URL and no navigation can
+  reset a half-typed filter. Applying is one gesture for the whole panel — several filters usually
+  change together, and applying each on change would be a page load per keystroke. A chip's `×` is
+  the exception, and immediate: it acts on what is filtered right now, not on a draft.
 - **routes/collections/[slug]/+page.ts** — asks for `PAGE_SIZE + 1` records and shows `PAGE_SIZE`:
   the REST list route answers with records and no total, so the extra record is how the pager learns
-  a next page exists without a second round trip. Sort and page live in the URL, so a sorted list is
-  a link.
+  a next page exists without a second round trip. Sort, filters and page live in the URL — one param
+  per filter, spelling out its operator (`?f.title=contains:svelte`), so a narrowed list is a link
+  that can be shared and edited by hand.
 
 ## Build and mount
 
@@ -294,8 +313,9 @@ declares `typescript@~6` and `@typescript/native` and runs `svelte-check --tsgo`
   default leaves the REST reads exactly as open as they were before the admin existed.
 - **Live updates.** The schema advertises `api.events`, and `@shuri/api` streams every change over
   SSE, but no screen subscribes yet: a list is what it was when it loaded.
-- **Search and filtering.** The store's `Query` supports `where`, and `encodeQuery` already sends
-  it, but the list UI only offers sort and paging.
+- **Full-text search.** A list filters field by field, one `FilterOp` each, because that is what
+  `Where` expresses. There is no box that searches every field at once, and no `between`: two bounds
+  on one field are two filters `Where` has nowhere to put.
 - **Uploads and rich text.** `@shuri/core` declares neither a `file` nor a `richText` field, so
   there is nothing here to render for them.
 - **A dark theme.** See `admin.css`: the design is one light palette.

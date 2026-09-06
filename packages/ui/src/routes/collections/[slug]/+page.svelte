@@ -3,6 +3,7 @@
   import { page } from "$app/state";
   import type { StoreRecord } from "@shuri/store";
   import PageHeader from "$lib/layout/PageHeader.svelte";
+  import ListFilters from "$lib/lists/ListFilters.svelte";
   import Pager from "$lib/lists/Pager.svelte";
   import RecordTable from "$lib/lists/RecordTable.svelte";
   import Alert from "$lib/ui/Alert.svelte";
@@ -10,12 +11,19 @@
   import ConfirmDialog from "$lib/ui/ConfirmDialog.svelte";
   import EmptyState from "$lib/ui/EmptyState.svelte";
   import { recordLabel } from "$lib/fields/values.js";
+  import {
+    filterFields,
+    filterParams,
+    type ListFilters as Filters,
+  } from "$lib/lists/filters.js";
   import { PAGE_SIZE } from "./+page.js";
   import type { PageProps } from "./$types.js";
 
   let { data }: PageProps = $props();
 
   const base = $derived(`${data.schema.basePath}/collections/${data.collection.slug}`);
+  const filterable = $derived(filterFields(data.collection));
+  const filtered = $derived(Object.keys(data.filters).length > 0);
   let deleteError = $state<unknown>(undefined);
   /** The record the confirmation is about, and the only thing that opens the dialog. */
   let pending = $state<StoreRecord | undefined>(undefined);
@@ -42,6 +50,15 @@
   function sortBy(field: string): void {
     const flip = data.order?.field === field && data.order.direction !== "desc";
     navigate({ sort: field, direction: flip ? "desc" : "asc", offset: undefined });
+  }
+
+  /**
+   * Applies the whole filter set at once, and returns to the first page: page three of the old
+   * result has nothing to do with the new one, and is usually past its end.
+   * @param filters - The filters to narrow the list by.
+   */
+  function applyFilters(filters: Filters): void {
+    navigate({ ...filterParams(filterable, filters), offset: undefined });
   }
 
   async function remove(record: StoreRecord): Promise<void> {
@@ -79,7 +96,30 @@
 {/if}
 
 <div class="shuri-card">
-  {#if data.records.length === 0}
+  {#if filterable.length > 0}
+    <ListFilters
+      fields={filterable}
+      filters={data.filters}
+      relationOptions={data.relationOptions}
+      relationLabels={data.relationLabels}
+      onapply={applyFilters}
+    />
+  {/if}
+
+  {#if data.records.length === 0 && filtered}
+    <!--
+      An empty result under a filter is not an empty collection, and must not offer to fix itself by
+      creating a record: what the author needs is the way back to the records they know are there.
+    -->
+    <EmptyState
+      title="Nenhum resultado"
+      description="Nenhum {data.collection.singular.toLowerCase()} corresponde aos filtros aplicados."
+    >
+      {#snippet action()}
+        <Button onclick={() => applyFilters({})}>Limpar filtros</Button>
+      {/snippet}
+    </EmptyState>
+  {:else if data.records.length === 0}
     <EmptyState
       title="Nenhum {data.collection.singular.toLowerCase()} ainda"
       description="Os campos do formulário vêm do schema desta coleção."
