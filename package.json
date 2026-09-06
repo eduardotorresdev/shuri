@@ -18,6 +18,8 @@
     "@typescript/native-preview": "^7.0.0-dev.20260707.2",
     "oxlint": "^1.81.0",
     "prettier": "^3.6.2",
+    "prettier-plugin-svelte": "^4.1.1",
+    "svelte": "^5.57.0",
     "turbo": "^2.10.12",
     "typescript": "^7.0.2"
   }

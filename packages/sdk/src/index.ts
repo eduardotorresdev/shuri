@@ -1,4 +1,5 @@
 export * from "./create.js";
+export * from "./plugin.js";
 export * from "./sveltekit.js";
 export type {
   AuthApi,

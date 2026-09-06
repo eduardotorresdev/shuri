@@ -22,4 +22,9 @@ true`.
 ## Role in the monorepo
 
 Keeps type-checking, linting, and formatting consistent across `core`, `store`, `store-memory`,
-`api`, `sdk`, `demo`, and `validate` without duplicating config in each one.
+`api`, `auth`, `better-auth`, `sdk`, `ui`, `demo`, and `validate` without duplicating config in each
+one.
+
+`@shuri/ui` extends `tsconfig.base.json` for its server side only (`tsconfig.server.json`); its
+SvelteKit side extends the config `svelte-kit sync` generates, which needs `moduleResolution:
+bundler` rather than this base's `NodeNext`.

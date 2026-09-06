@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { CollectionSchema } from "./types.js";
-import { hiddenFieldNames, redactRecord, redactRecords, servableCollections } from "./redact.js";
+import {
+  hiddenFieldNames,
+  redactRecord,
+  redactRecords,
+  servableCollections,
+  visibleFields,
+} from "./redact.js";
 
 const accountsSchema: CollectionSchema = {
   slug: "accounts",
@@ -93,6 +99,20 @@ describe("redactRecords", () => {
 
 describe("servableCollections", () => {
   it("drops the internal ones and keeps the rest in order", () => {
-    expect(servableCollections([accountsSchema, sessionsSchema])).toEqual([accountsSchema]);
+    expect(servableCollections([accountsSchema, sessionsSchema])).toEqual([
+      accountsSchema,
+    ]);
+  });
+});
+
+describe("visibleFields", () => {
+  it("drops the hidden fields and keeps the rest in declaration order", () => {
+    expect(visibleFields(accountsSchema)).toEqual([
+      { type: "email", name: "email", required: true },
+    ]);
+  });
+
+  it("returns the declared array itself when nothing is hidden", () => {
+    expect(visibleFields(sessionsSchema)).toBe(sessionsSchema.fields);
   });
 });

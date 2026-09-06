@@ -1,0 +1,59 @@
+{
+  "name": "@shuri/ui",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/server/index.js",
+  "types": "./dist/server/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/server/index.d.ts",
+      "import": "./dist/server/index.js"
+    },
+    "./shared": {
+      "types": "./dist/shared/index.d.ts",
+      "import": "./dist/shared/index.js"
+    },
+    "./components": {
+      "types": "./src/lib/index.ts",
+      "svelte": "./src/lib/index.ts",
+      "import": "./src/lib/index.ts"
+    },
+    "./admin.css": "./src/lib/styles/admin.css",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "build",
+    "src/lib",
+    "src/shared"
+  ],
+  "scripts": {
+    "prepare": "svelte-kit sync",
+    "dev": "vite dev",
+    "build": "svelte-kit sync && vite build && tsgo -p tsconfig.build.json",
+    "typecheck": "svelte-kit sync && svelte-check --tsgo --tsconfig ./tsconfig.json && tsgo --noEmit -p tsconfig.server.json",
+    "lint": "oxlint",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@shuri/api": "workspace:*",
+    "@shuri/auth": "workspace:*",
+    "@shuri/core": "workspace:*",
+    "@shuri/store": "workspace:*",
+    "@shuri/validate": "workspace:*"
+  },
+  "devDependencies": {
+    "@shuri/config": "workspace:*",
+    "@sveltejs/adapter-static": "^3.0.10",
+    "@sveltejs/kit": "^2.70.3",
+    "@sveltejs/vite-plugin-svelte": "^6.2.4",
+    "@types/node": "^22.13.1",
+    "@typescript/native": "npm:typescript@^7.0.2",
+    "svelte": "^5.57.0",
+    "svelte-check": "^4.7.6",
+    "typescript": "~6.0.3",
+    "vite": "^7.1.0",
+    "vitest": "^3.2.4"
+  }
+}

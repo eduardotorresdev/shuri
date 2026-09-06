@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" href="%sveltekit.assets%/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <!--
+      The one style outside admin.css: the stylesheet arrives with the app bundle, so without this
+      the first paint is a white page that turns cream a moment later.
+    -->
+    <style>
+      html {
+        background: #ece9e3;
+      }
+    </style>
+    %sveltekit.head%
+  </head>
+  <body data-sveltekit-preload-data="hover">
+    <div style="display: contents">%sveltekit.body%</div>
+  </body>
+</html>

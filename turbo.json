@@ -5,6 +5,10 @@
       "dependsOn": ["^build"],
       "outputs": ["dist/**"]
     },
+    "@shuri/ui#build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", "build/**"]
+    },
     "typecheck": {
       "dependsOn": ["^typecheck"]
     },

@@ -83,3 +83,26 @@ export function matches(pattern: RegExp, message: string): Validator<unknown> {
     if (!pattern.test(value)) ctx.addIssue(message);
   };
 }
+
+/**
+ * The shape an email must have: something, an `@`, something, a dot, something — none of them
+ * containing a space or a second `@`.
+ *
+ * Deliberately loose. A regex that tries to implement RFC 5322 rejects addresses that genuinely
+ * work, and the only proof an address exists is sending something to it. This catches a typo and a
+ * pasted sentence, and leaves the rest to verification.
+ */
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * Reports an issue when a string isn't shaped like an email address. A non-string value is left to
+ * `string()`, so composing the two reports one issue rather than two for the same cause.
+ * @param [message] - The issue message reported when the string isn't an email.
+ * @returns A validator that fails when the value is a string that isn't an email.
+ */
+export function email(message = "must be a valid email"): Validator<unknown> {
+  return (value, ctx) => {
+    if (typeof value !== "string") return;
+    if (!EMAIL_PATTERN.test(value)) ctx.addIssue(message);
+  };
+}

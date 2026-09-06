@@ -79,4 +79,6 @@ src/
 types): it calls `redact.ts`'s functions from its `visibility/` folder to enforce `hidden`/`internal`,
 and reads `Core`/`CollectionSchema`/`GlobalSchema`/`Field` to build the OpenAPI document — leaving the
 `createCore` call itself to `@shuri/sdk`. `@shuri/auth` declares its four collections as plain schema
-literals of this package.
+literals of this package. `@shuri/ui` calls `redact.ts`'s `servableCollections`/`visibleFields` to
+build the document its admin generates every screen from, so the admin shows exactly the collections
+and fields the HTTP surface does.

@@ -1,5 +1,9 @@
 # @shuri/auth
 
+> An alternative exists: `@shuri/better-auth` runs [better-auth](https://better-auth.com) on the same
+> store, trading this package's zero dependencies for email verification, password reset, 2FA and
+> roles. An app picks one.
+
 Authentication for a Shuri app: signup, login, logout and current-session by email and password, plus
 sign-in through OIDC providers the host declares — either a fully static config, or a `{ id, preset }`
 slot (Google and Microsoft ship as presets) whose `clientId`/`clientSecret`/`redirectUri` an admin
@@ -118,14 +122,14 @@ contract `@shuri/api`'s handlers follow.
   boot by `oidcProvider`, exactly as before. A `OidcProviderSlot` (`{ id, preset }`) is validated at
   boot by `oidcProviderSlot` — id shape and preset name only, since it carries no credentials — and
   completed by `resolveProviderSlot` on **every** sign-in, reading its `_oidc_credentials` row fresh:
-  deliberately uncached, unlike `discovery.ts`'s hour-long cache, which exists to spare a *network*
+  deliberately uncached, unlike `discovery.ts`'s hour-long cache, which exists to spare a _network_
   round trip. This is one local store read, on a route that is about to make one anyway (the session
   insert after a successful callback). The two are told apart structurally
   (`isProviderSlot`/`ProviderDeclaration`) — a slot never carries `clientId`, a static config always
   does — so no extra discriminant tag was needed. A slot whose row doesn't exist yet answers the same
   404 as an undeclared provider (`UnknownProviderError`); a slot whose row is missing something its
   preset needs (`microsoft` without `tenant`) answers 500 (`IncompleteOidcCredentialsError`) — the
-  provider is declared and even has a row, just not a *usable* one.
+  provider is declared and even has a row, just not a _usable_ one.
 - **password/** — PBKDF2-HMAC-SHA256 at 600k iterations behind a `PasswordHasher` port, so a Node
   host can plug argon2 in. The stored format is self-describing, and `verify` reads iterations, salt
   and key length **from the stored hash**, never from the current config: raising the cost next year

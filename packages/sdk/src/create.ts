@@ -1,6 +1,7 @@
 import {
   createHandler,
   type CreateApiHandlerOptions,
+  type FallingHandler,
   type CreateGlobalsApiHandlerOptions,
   type CreateOpenApiHandlerOptions,
   type CreateRealtimeHandlerOptions,
@@ -20,6 +21,11 @@ import {
   type InferGlobal,
 } from "@shuri/core";
 import {
+  collectPluginCollections,
+  type PluginContext,
+  type ShuriPlugin,
+} from "./plugin.js";
+import {
   createStore,
   type CollectionStore,
   type GlobalStore,
@@ -35,6 +41,39 @@ export interface CreateConfig<
   collections: T;
   globals?: G;
   adapter: StoreAdapter;
+  /**
+   * Extra handlers mounted ahead of every built-in one, each answering a request or declining it so
+   * the next gets its turn (see `@shuri/api`'s `FallingHandler`). This is where a surface that isn't
+   * part of the core toolkit goes — `@shuri/ui`'s admin, a webhook receiver, an access guard.
+   *
+   * They run in the order given, before auth's own, so a guard listed first really does guard the
+   * rest:
+   *
+   *   handlers: [requireApiKey, createAdminHandler({ collections, globals })]
+   *
+   * A **function** instead, when a handler needs something this call builds — the `AuthApi`, most
+   * of all, which cannot exist before the store does and so cannot be passed in from outside:
+   *
+   *   handlers: ({ auth }) => [createAdminHandler({ collections, globals }, { auth: { auth } })]
+   *
+   * An array and a function tell themselves apart, so both forms are accepted with no wrapper.
+   */
+  handlers?:
+    | readonly FallingHandler[]
+    | ((context: HandlerContext<A>) => readonly FallingHandler[]);
+  /**
+   * Plugins contributing **collections** as well as handlers — see `ShuriPlugin`.
+   *
+   * Use this over `handlers` when a thing persists into the app's own store: its collections have to
+   * be in the schema before the store is built, and its handlers need that store once it is.
+   * `handlers` stays the simpler option when a plain handler is all you have.
+   *
+   *   plugins: [betterAuthPlugin({ options })]
+   *
+   * Plugin collections are merged into the schema but kept off `app.collections`, exactly as auth's
+   * are.
+   */
+  plugins?: readonly ShuriPlugin[];
   /** Options for the HTTP handler exposed as `app.handler`. See `@shuri/api`'s `createApiHandler`. */
   api?: CreateApiHandlerOptions;
   /** Options for the globals HTTP handler exposed as `app.handler`. See `@shuri/api`'s `createGlobalsApiHandler`. */
@@ -49,6 +88,20 @@ export interface CreateConfig<
    * app exactly as it was, `app.auth` included — which is `undefined`.
    */
   auth?: A;
+}
+
+/**
+ * What a `handlers` function receives: everything `create()` builds that a handler might need but
+ * cannot construct itself.
+ *
+ * One property today. It is an object rather than the `AuthApi` alone so that adding the next thing
+ * a handler turns out to need is not a breaking change to every host that uses this.
+ */
+export interface HandlerContext<
+  A extends AuthConfig | undefined = AuthConfig | undefined,
+> {
+  /** The auth service, present exactly when `config.auth` was — the same value as `app.auth`. */
+  auth: A extends AuthConfig ? AuthApi : undefined;
 }
 
 /** One `CollectionStore` per declared slug, so `app.collections.posts.insert(...)` is typed per that collection's fields. */
@@ -141,6 +194,36 @@ function buildGlobals<
  * @param config - The collections/globals schema, persistence adapter, and handler options.
  * @returns The app facade tying `config.collections`/`config.globals` to `config.adapter`.
  */
+/**
+ * Resolves `config.handlers` to a plain array, calling it with the handler context when it is a
+ * function.
+ * @param handlers - The declared handlers, an array or a function of the context.
+ * @param auth - The auth service to expose on the context, `undefined` when auth is off.
+ * @returns The handlers to mount, empty when none were declared.
+ */
+function resolveHandlers<A extends AuthConfig | undefined>(
+  handlers: CreateConfig<never[], never[], A>["handlers"],
+  auth: HandlerContext<A>["auth"],
+): readonly FallingHandler[] {
+  if (!handlers) return [];
+  // `typeof`, not `Array.isArray`: the latter's guard is `arg is any[]`, which a `readonly` array
+  // does not match, so it narrows neither branch of this union.
+  return typeof handlers === "function" ? handlers({ auth }) : handlers;
+}
+
+/**
+ * Resolves every plugin's handlers, in declaration order.
+ * @param plugins - The declared plugins.
+ * @param context - The store and auth service to hand each one.
+ * @returns Every plugin handler, flattened, in plugin order.
+ */
+function resolvePluginHandlers(
+  plugins: readonly ShuriPlugin[],
+  context: PluginContext,
+): readonly FallingHandler[] {
+  return plugins.flatMap((plugin) => plugin.handlers?.(context) ?? []);
+}
+
 export function create<
   const T extends readonly CollectionSchema[],
   const G extends readonly GlobalSchema[] = [],
@@ -150,22 +233,37 @@ export function create<
   // auth's collections — dissolves because `@shuri/auth` is two separable things: a static constant
   // of schemas, and a service bound to a store. The constant goes in first, the service comes last.
   if (config.auth) assertNoAuthSlugCollision(config.collections);
-  const collections = (config.auth
+
+  const plugins = config.plugins ?? [];
+  const base = config.auth
     ? [...authCollections, ...config.collections]
-    : config.collections) as unknown as T;
+    : config.collections;
+  const pluginCollections = collectPluginCollections(
+    plugins,
+    new Set(base.map((collection) => collection.slug)),
+  );
+  const collections = [...pluginCollections, ...base] as unknown as T;
 
   const core = createCore({ collections, globals: config.globals as G });
   const store = createStore(core, config.adapter);
   const auth = config.auth ? createAuth({ store, ...config.auth }) : undefined;
+  const appAuth = auth as ShuriApp<T, G, A>["auth"];
 
   return {
     collections: buildCollections(config.collections, store),
     globals: buildGlobals((config.globals ?? []) as G, store),
-    auth: auth as ShuriApp<T, G, A>["auth"],
+    auth: appAuth,
     handler: createHandler(
       { core, store },
       {
-        handlers: auth ? [auth.handler] : undefined,
+        // Auth's handler goes last of the three: a guard passed in `config.handlers` has to run
+        // before the routes that issue sessions — but never *instead* of them, or signing in would
+        // be refused for want of the very session it hands out.
+        handlers: [
+          ...resolveHandlers(config.handlers, appAuth),
+          ...resolvePluginHandlers(plugins, { store, auth } as unknown as PluginContext),
+          ...(auth ? [auth.handler] : []),
+        ],
         api: config.api,
         globalsApi: config.globalsApi,
         realtime: config.realtime,
