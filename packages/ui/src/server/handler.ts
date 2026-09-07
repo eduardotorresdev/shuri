@@ -6,8 +6,9 @@ import { resolveAdminAuth } from "./auth/access.js";
 import { createAdminGuard } from "./auth/guard.js";
 import { createAdminSetupHandler } from "./auth/setup.js";
 import type { AdminAuthOptions } from "./auth/types.js";
-import { buildAdminSchema, type AdminSchemaSource } from "./schema/build.js";
+import { adminUsers, buildAdminSchema, type AdminSchemaSource } from "./schema/build.js";
 import { createAdminSchemaHandler } from "./schema/handler.js";
+import { createAdminUsersHandler } from "./users/handler.js";
 import type { AdminApiPaths, AdminSchema } from "../shared/schema.js";
 
 export interface CreateAdminHandlerOptions {
@@ -78,7 +79,19 @@ export function createAdminHandler(
   const auth = options.auth
     ? resolveAdminAuth(options.auth, base.api, base.basePath)
     : undefined;
-  const schema: AdminSchema = base;
+
+  // User administration exists only behind auth: without a session there is nobody to be authorized,
+  // and screens that mint accounts must never be the one part of the admin that answers to anyone.
+  const users =
+    options.auth && options.auth.users !== false
+      ? (options.auth.users ?? options.auth.auth.users)
+      : undefined;
+  // `{basePath}/api/users`, not `{basePath}/users`: the latter is the Users *screen*, and the client
+  // router owns every path under `basePath` that isn't a file — a data route there would answer the
+  // browser's page request with JSON.
+  const schema: AdminSchema = users
+    ? { ...base, users: adminUsers(`${base.basePath}/api/users`) }
+    : base;
 
   const chain: FallingHandler[] = [];
   // Setup goes ahead of the guard: it is the one route that must answer without a session, since it
@@ -90,8 +103,12 @@ export function createAdminHandler(
   // the admin edits through.
   if (auth) chain.push(createAdminGuard(auth));
   // Schema next: it sits under `basePath`, and the assets handler answers everything there, so
-  // `schema.json` would come back as `index.html` if the order were reversed.
+  // `schema.json` would come back as `index.html` if the order were reversed. The users routes go
+  // in the same window, and for the same reason.
   chain.push(createAdminSchemaHandler(schema, auth));
+  if (users && auth && schema.users) {
+    chain.push(createAdminUsersHandler(users, auth, schema.users.path));
+  }
 
   if (options.assets !== false) {
     const assets = options.assets ?? loadAdminAssets();

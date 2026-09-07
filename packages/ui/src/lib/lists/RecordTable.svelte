@@ -20,6 +20,12 @@
     order?: OrderBy;
     onsort?: (field: string) => void;
     ondelete?: (record: StoreRecord) => void;
+    /**
+     * Whether a given row may be deleted, when that isn't true of all of them — the users list has
+     * one row, the operator's own, that the server refuses to delete. Rendering a button that is
+     * certain to fail is worse than rendering none.
+     */
+    candelete?: (record: StoreRecord) => boolean;
   }
 
   let {
@@ -30,6 +36,7 @@
     order,
     onsort,
     ondelete,
+    candelete,
   }: Props = $props();
 
   const columns = $derived(listColumns(collection));
@@ -102,7 +109,7 @@
             -->
             <span>
               <a href={href(record)}>Editar</a>
-              {#if ondelete}
+              {#if ondelete && (candelete?.(record) ?? true)}
                 <button type="button" class="delete" onclick={() => ondelete(record)}>
                   Remover
                 </button>

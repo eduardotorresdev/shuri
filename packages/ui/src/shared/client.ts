@@ -30,6 +30,25 @@ export interface AdminClient {
   remove(slug: string, id: RecordId): Promise<void>;
   getGlobal(slug: string): Promise<RecordInput>;
   updateGlobal(slug: string, data: RecordInput): Promise<RecordInput>;
+  /**
+   * The users routes, which live under the admin's own mount rather than under `api.collections` —
+   * the `users` collection is `internal`, and this path is the guarded door into it. Every one of
+   * these throws `NoUserAdminError` when the schema advertises no users block, which is the same
+   * thing as the host not offering user administration at all.
+   */
+  listUsers(query?: Query): Promise<StoreRecord[]>;
+  getUser(id: RecordId): Promise<StoreRecord>;
+  createUser(data: RecordInput): Promise<StoreRecord>;
+  updateUser(id: RecordId, data: RecordInput): Promise<StoreRecord>;
+  removeUser(id: RecordId): Promise<void>;
+}
+
+/** A users call on an admin whose schema has no users block. A programming error, not a request failure. */
+export class NoUserAdminError extends Error {
+  constructor() {
+    super("This admin does not offer user administration");
+    this.name = "NoUserAdminError";
+  }
 }
 
 interface ErrorBody {
@@ -117,7 +136,7 @@ export async function fetchAdminSchema(
  * @returns A client over the app's collections and globals.
  */
 export function createAdminClient(
-  schema: Pick<AdminSchema, "api">,
+  schema: Pick<AdminSchema, "api" | "users">,
   options: AdminClientOptions = {},
 ): AdminClient {
   const doFetch = options.fetch ?? globalThis.fetch;
@@ -131,6 +150,17 @@ export function createAdminClient(
 
   const collections = schema.api.collections;
   const globals = schema.api.globals;
+
+  /**
+   * The users path, or the error that says why there isn't one. Resolved per call rather than at
+   * build time: the schema is re-read on every navigation, and a caller that got here without a
+   * users block is a screen that should not have been reachable.
+   * @returns The path the users routes are mounted at.
+   */
+  function usersPath(): string {
+    if (!schema.users) throw new NoUserAdminError();
+    return schema.users.path;
+  }
 
   return {
     list(slug, query) {
@@ -148,5 +178,16 @@ export function createAdminClient(
     getGlobal: (slug) => request<RecordInput>(`${globals}/${slug}`),
     updateGlobal: (slug, data) =>
       request<RecordInput>(`${globals}/${slug}`, jsonBody("PATCH", data)),
+
+    listUsers(query) {
+      const params = encodeQuery(query);
+      const search = params.size > 0 ? `?${params}` : "";
+      return request<StoreRecord[]>(`${usersPath()}${search}`);
+    },
+    getUser: (id) => request<StoreRecord>(`${usersPath()}/${id}`),
+    createUser: (data) => request<StoreRecord>(usersPath(), jsonBody("POST", data)),
+    updateUser: (id, data) =>
+      request<StoreRecord>(`${usersPath()}/${id}`, jsonBody("PATCH", data)),
+    removeUser: (id) => request<void>(`${usersPath()}/${id}`, { method: "DELETE" }),
   };
 }

@@ -79,7 +79,23 @@ export function navGroups(schema: AdminSchema): readonly NavGroup[] {
     })),
   };
 
-  return [collections, ...groupGlobals(schema.globals, base)].filter(
+  // Its own group, last, rather than an entry among the collections: accounts are not content, and
+  // an app's own `users`-shaped collection (a profile, an author) would sit in that list beside it.
+  const access: NavGroup = {
+    title: "Acesso",
+    items: schema.users
+      ? [
+          {
+            label: schema.users.collection.plural,
+            href: `${base}/users`,
+            icon: "user",
+            newHref: `${base}/users/new`,
+          },
+        ]
+      : [],
+  };
+
+  return [collections, ...groupGlobals(schema.globals, base), access].filter(
     (group) => group.items.length > 0,
   );
 }

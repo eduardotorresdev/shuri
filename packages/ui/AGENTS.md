@@ -11,16 +11,18 @@ It ships two ways, and they are the same code:
 - **The components**, exported from `@shuri/ui/components`, for embedding a schema-driven table or
   form into an app of your own.
 
-Pass `options.auth` and it sits behind a login, guarding the REST routes it edits through. Omit it
-and **there is no access control at all**: mounting the admin then exposes an editing UI for every
-collection the REST routes already serve, to whoever can reach them.
+Pass `options.auth` and it sits behind a login, guarding the REST routes it edits through — and it
+gains the Users screens, since the accounts that sign in are the one thing an admin behind a login
+has to be able to manage. Omit it and **there is no access control at all**: mounting the admin then
+exposes an editing UI for every collection the REST routes already serve, to whoever can reach them,
+and no Users screens exist to gate.
 
 ## Tree
 
 ```
 src/
   shared/                     the contract, shared by the server and the browser
-    schema.ts                  AdminSchema/AdminCollection/AdminGlobal/AdminApiPaths/AdminAuth/AdminViewer
+    schema.ts                  AdminSchema/AdminCollection/AdminGlobal/AdminApiPaths/AdminAuth/AdminUsers/AdminViewer
     errors.ts                   AdminRequestError, issuesByField
     client.ts                    fetchAdminSchema, createAdminClient, encodeQuery
     auth.ts                       createAdminAuthClient, signInErrorMessage
@@ -39,8 +41,11 @@ src/
       setup.ts                          createAdminSetupHandler: the first-account route
       test-support.ts                    stubSessions/asUser
     schema/
-      build.ts                   buildAdminSchema/shellSchema: declared schemas -> the admin's document
+      build.ts                   buildAdminSchema/shellSchema/adminUsers: schemas -> the admin's document
       handler.ts                  createAdminSchemaHandler: GET {basePath}/schema.json, per session
+    users/
+      routes.ts                  matchUsersRoute
+      handler.ts                  createAdminUsersHandler: {basePath}/api/users, behind `authorize`
     assets/
       types.ts                   AdminAsset/AdminAssets
       load.ts                     loadAdminAssets: reads build/ into memory, once, at startup
@@ -72,6 +77,9 @@ src/
       Pager.svelte                  offset paging
       columns.ts                     listColumns/isSortable
       filters.ts                      filterOps/filterFields/readFilters/formFilters/toWhere
+      paging.ts                        PAGE_SIZE, shared by every list
+    users/
+      UserForm.svelte            the account form: schema fields, plus the write-only password
     auth/
       AuthCard.svelte            the cream page and white card the three signed-out screens share
       SetupScreen.svelte          the first-account form, shown while no account exists
@@ -90,6 +98,8 @@ src/
     collections/[slug]/new/+page.*    create
     collections/[slug]/[id]/+page.*   edit and delete
     globals/[slug]/+page.*            the single-record form
+    users/+page.*                      the accounts list
+    users/new/+page.* , users/[id]/+page.*   create, edit and delete an account
 ```
 
 ## What each part does
@@ -203,6 +213,25 @@ src/
   advertises, turning a non-2xx into an `AdminRequestError` carrying `issues`. `fetchAdminSchema` is
   separate because it produces `createAdminClient`'s argument: the schema names the paths, so the
   data client can't exist before it has been read.
+- **server/users/** — the Users screens' data routes, at `{basePath}/api/users`, delegating to
+  `@shuri/auth`'s `AuthApi.users`. Three things about them are deliberate:
+  - **They are inside the admin's mount, not on the REST surface.** `users` stays `internal: true`,
+    so it is served nowhere else; this is the one door into it, and it is behind the admin's own
+    `authorize`.
+  - **They check that gate themselves**, rather than leaning on `createAdminGuard`: the guard covers
+    the app's REST base paths, and these paths are deliberately outside them. Reads are guarded too
+    — the default `protect` leaves REST reads open because a headless CMS's content is meant to be
+    read, and a list of email addresses is not content.
+  - **`/api/users`, not `/users`.** The latter is the Users _page_, and the client router owns every
+    path under `basePath` that isn't a file; a data route there answers the browser's page request
+    with JSON. (Caught exactly that way, by loading the page.)
+    The screens appear when the host's auth offers user administration — `app.auth` carries `users`,
+    so passing it is enough — and `auth.users: false` leaves them out. **Whoever may use the admin may
+    mint an account**, which with the default `authorize` means minting an administrator.
+- **lib/users/UserForm.svelte** — the account form. Not `RecordForm`, though it renders the same
+  controls from the same schema: a user carries one thing no record does, a credential that is
+  written and never read back. The box is empty even when a password is set, and empty means
+  "unchanged" (on edit) or "no password yet, sign-in is federated only" (on create) — never `""`.
 - **lib/lists/filters.ts** — which fields a list can be filtered by, and the whole round trip
   between a URL, the filter form and the store's `Where`. The operators are chosen per field type —
   `contains` on prose, the six comparisons on a number, `eq` on a closed set — and a multi-valued
@@ -319,8 +348,14 @@ declares `typescript@~6` and `@typescript/native` and runs `svelte-check --tsgo`
 - **Uploads and rich text.** `@shuri/core` declares neither a `file` nor a `richText` field, so
   there is nothing here to render for them.
 - **A dark theme.** See `admin.css`: the design is one light palette.
-- **User management and appearance settings.** The design mock has screens for both; neither is
-  built, because the admin has no roles to edit (see above) and the theme is four CSS variables an
+- **Roles on the Users screens.** Accounts can be created, edited and deleted, but there is nothing
+  to grant: `authorize` is the host's predicate, not a stored role, so every account the screens
+  create is as privileged as `authorize` says it is. Deleting your own account is refused (it would
+  sign you out mid-request, and on a one-address `authorize` it locks the admin for good).
+- **A date column on the Users list.** `users.createdAt` is left out of the advertised collection:
+  it is stored as epoch milliseconds and `@shuri/core` has no `date` field type, so a column would
+  print `1788733871182` and a filter would ask an author to type one.
+- **Appearance settings.** The design mock has a screen for it; the theme is four CSS variables an
   embedding app can already override.
 
 ## Role in the monorepo

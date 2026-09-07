@@ -38,12 +38,15 @@ export * from "./fields/values.js";
 export { default as RecordForm } from "./forms/RecordForm.svelte";
 export { default as IssueSummary } from "./forms/IssueSummary.svelte";
 
+export { default as UserForm } from "./users/UserForm.svelte";
+
 export { default as RecordTable } from "./lists/RecordTable.svelte";
 export { default as Pager } from "./lists/Pager.svelte";
 export { default as ListFilters } from "./lists/ListFilters.svelte";
 export { default as FilterControl } from "./lists/FilterControl.svelte";
 export * from "./lists/columns.js";
 export * from "./lists/filters.js";
+export * from "./lists/paging.js";
 
 export { default as Alert } from "./ui/Alert.svelte";
 export { default as Button } from "./ui/Button.svelte";

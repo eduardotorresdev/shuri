@@ -1,10 +1,10 @@
 /**
  * The admin's icon set: a name to the paths that draw it, on a 24×24 grid.
  *
- * Hand-drawn and inlined rather than pulled from an icon font or a package. There are seven of them,
- * they never change, and an icon font would be a second webfont download plus a build step for the
- * sake of glyphs a `<path>` already covers. Every path is stroked in `currentColor`, so an icon
- * takes its colour from whatever it sits in.
+ * Hand-drawn and inlined rather than pulled from an icon font or a package. There is a handful of
+ * them, they rarely change, and an icon font would be a second webfont download plus a build step
+ * for the sake of glyphs a `<path>` already covers. Every path is stroked in `currentColor`, so an
+ * icon takes its colour from whatever it sits in.
  */
 export const ICONS = {
   /** The index — where the sidebar's first entry goes. */
@@ -17,6 +17,11 @@ export const ICONS = {
     "M13.5 3.2v4.4H18",
     "M9.8 13h5.4",
     "M9.8 17h5.4",
+  ],
+  /** A person: the accounts that may sign in, as opposed to the records they edit. */
+  user: [
+    "M12 4.2a3.9 3.9 0 1 1 0 7.8 3.9 3.9 0 0 1 0-7.8",
+    "M4.6 20.4a7.4 7.4 0 0 1 14.8 0",
   ],
   plus: ["M12 5.2v13.6", "M5.2 12h13.6"],
   chevronLeft: ["m15 5.5-7 6.5 7 6.5"],

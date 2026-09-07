@@ -11,6 +11,7 @@ import { signIn } from "./credentials/login.js";
 import { signUp } from "./credentials/signup.js";
 import { AuthSlugCollisionError, UnauthenticatedError } from "./errors.js";
 import { createAuthHandler } from "./routes/handler.js";
+import { createUserAdmin, type UserAdminApi } from "./users/admin.js";
 import type {
   AuthSession,
   Credentials,
@@ -42,6 +43,15 @@ export interface AuthApi {
    * authenticated admin route, never the public REST surface.
    */
   oidcCredentials: CollectionStore<RecordInput>;
+  /**
+   * Creating, reading, changing and removing users as an *operator* — the admin's Users screen runs
+   * on this. Separate from `signUp`, which is self-registration: that one demands a password and
+   * hands back a session, neither of which makes sense when the caller is somebody else.
+   *
+   * `users` is `internal: true`, so this is the only way in. Wire it behind an authenticated route
+   * of your own — never the public REST surface, which is exactly what `internal` is keeping it off.
+   */
+  users: UserAdminApi;
   signUp(input: Credentials, meta?: SessionMetadata): Promise<IssuedSession>;
   signIn(input: Credentials, meta?: SessionMetadata): Promise<IssuedSession>;
   signOut(token: string): Promise<void>;
@@ -107,6 +117,7 @@ export function createAuth<
     handler: createAuthHandler(context),
     getSession,
     oidcCredentials: context.oidcCredentials,
+    users: createUserAdmin(context),
 
     async requireSession(request) {
       const session = await getSession(request);

@@ -5,12 +5,14 @@ import {
   type Field,
   type GlobalSchema,
 } from "@shuri/core";
+import { MIN_PASSWORD_LENGTH, usersCollection } from "@shuri/auth";
 import type {
   AdminApiPaths,
   AdminAuth,
   AdminCollection,
   AdminGlobal,
   AdminSchema,
+  AdminUsers,
 } from "../../shared/schema.js";
 
 /** The declared schema the admin describes — the same two arrays a consumer hands `create()`. */
@@ -117,7 +119,54 @@ export function buildAdminSchema(
 }
 
 /**
- * The same document with every collection and global stripped out — what a signed-out visitor gets.
+ * The fields of `users` the admin renders, in the order the screens read best.
+ *
+ * `createdAt` is left out, and it is the only one: it is stored as epoch milliseconds, and there is
+ * no `date` field type in `@shuri/core` — so a column for it would print `1788733871182` and a
+ * filter for it would ask an author to type one. Leaving it out is better than showing it badly;
+ * bringing it back is a field type, not a change here.
+ *
+ * `passwordHash` never reaches this list: `visibleFields` drops it, exactly as it drops any `hidden`
+ * field of any collection.
+ */
+const USER_FIELDS: Readonly<Record<string, string>> = {
+  email: "E-mail",
+  name: "Nome",
+  emailVerified: "E-mail verificado",
+};
+
+/**
+ * The `users` collection as the admin's screens render it.
+ *
+ * Built from `@shuri/auth`'s own schema, not from a copy declared here: the form an operator fills
+ * in is generated from the same field list the store validates against, so the two cannot drift.
+ * @param path - The path the users routes are mounted at.
+ * @returns The users block for the schema document.
+ */
+export function adminUsers(path: string): AdminUsers {
+  const collection = toAdminCollection(usersCollection);
+
+  return {
+    path,
+    passwordMinLength: MIN_PASSWORD_LENGTH,
+    collection: {
+      ...collection,
+      title: "Usuários",
+      singular: "Usuário",
+      plural: "Usuários",
+      // Labelled here rather than in `@shuri/auth`: that package's schema is the app's data model
+      // and says nothing in any particular language, while everything an author reads in this admin
+      // is written in one.
+      fields: collection.fields
+        .filter((field) => field.name in USER_FIELDS)
+        .map((field) => ({ ...field, label: USER_FIELDS[field.name] })),
+    },
+  };
+}
+
+/**
+ * The same document with every collection, global and the users block stripped out — what a
+ * signed-out visitor gets.
  *
  * The shell has to be public: the login form is generated from `auth`, so a visitor with no session
  * still needs to be told where to post one. Everything that describes the app's content is what gets
@@ -126,5 +175,7 @@ export function buildAdminSchema(
  * @returns The document without `collections` and `globals`.
  */
 export function shellSchema(schema: AdminSchema): AdminSchema {
-  return { ...schema, collections: [], globals: [] };
+  const shell: AdminSchema = { ...schema, collections: [], globals: [] };
+  delete shell.users;
+  return shell;
 }

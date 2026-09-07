@@ -1,4 +1,4 @@
-import type { AuthSession } from "@shuri/auth";
+import type { AuthSession, UserAdminApi } from "@shuri/auth";
 import type { AdminSetupOptions } from "./setup-types.js";
 
 /**
@@ -8,6 +8,12 @@ import type { AdminSetupOptions } from "./setup-types.js";
  */
 export interface AdminSessionSource {
   getSession(request: Request): Promise<AuthSession | undefined>;
+  /**
+   * User administration, when the auth implementation has any. `app.auth` carries it, so passing
+   * that is all it takes to get the Users screens; an implementation without it simply doesn't get
+   * them, and nothing else changes.
+   */
+  users?: UserAdminApi;
 }
 
 export interface AdminAuthOptions {
@@ -49,6 +55,16 @@ export interface AdminAuthOptions {
    * too, pass `everythingUnderApi`.
    */
   protect?: (request: Request) => boolean;
+  /**
+   * The Users screens: listing, creating, editing and deleting accounts. Defaults to `auth.users`,
+   * so an app on `@shuri/auth` gets them by passing `app.auth`.
+   *
+   * They sit behind `authorize` like everything else in the admin, which is worth saying out loud:
+   * **whoever may use the admin may mint an account** — and with the default `authorize`, an account
+   * is an admin. Pass `false` to leave the screens out, or a `UserAdminApi` of your own to put
+   * something else behind them.
+   */
+  users?: UserAdminApi | false;
   /**
    * Turns on the first-run flow: while the app has no account, the admin shows a form that creates
    * one instead of a login form. Omitting it means the host seeds its first account some other way.

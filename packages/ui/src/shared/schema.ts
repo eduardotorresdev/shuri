@@ -67,6 +67,26 @@ export interface AdminSetup {
   tokenRequired: boolean;
 }
 
+/**
+ * The users screens: where they post, and the shape they render.
+ *
+ * Present only when the host's auth implementation offers user administration **and** the caller may
+ * use the admin — it is stripped from the shell document alongside `collections`, since knowing that
+ * a users route exists is knowing where to aim.
+ *
+ * `path` is under the admin's own mount, not under `api.collections`: the `users` collection is
+ * `internal`, so it is not served over REST at all, and these screens go through the one route that
+ * is guarded by the admin's own `authorize`.
+ */
+export interface AdminUsers {
+  /** Full path the users routes are mounted at, e.g. `/admin/users`. */
+  path: string;
+  /** The collection as the screens render it — the same shape every other list and form is built from. */
+  collection: AdminCollection;
+  /** The auth implementation's own minimum, so the form states the policy the server will enforce. */
+  passwordMinLength: number;
+}
+
 /** The signed-in user, as the admin's header shows them. A projection of `@shuri/auth`'s `AuthUser`. */
 export interface AdminUser {
   id: string;
@@ -122,6 +142,8 @@ export interface AdminSchema {
    * sign in" — never which collections exist or what fields they hold.
    */
   viewer?: AdminViewer;
+  /** Present exactly when the users screens are available to this caller. See {@link AdminUsers}. */
+  users?: AdminUsers;
   collections: readonly AdminCollection[];
   globals: readonly AdminGlobal[];
 }

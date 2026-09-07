@@ -3,10 +3,10 @@ import type { OrderBy, SortDirection } from "@shuri/store";
 import { loadRelationOptions, relationLabels } from "$lib/fields/relations.js";
 import { listColumns } from "$lib/lists/columns.js";
 import { filterFields, readFilters, toWhere } from "$lib/lists/filters.js";
+import { PAGE_SIZE } from "$lib/lists/paging.js";
 import type { PageLoad } from "./$types.js";
 
-/** Records per page. */
-export const PAGE_SIZE = 25;
+export { PAGE_SIZE };
 
 /**
  * Loads one page of a collection's records.

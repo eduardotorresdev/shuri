@@ -38,27 +38,39 @@ interface RawCredentials {
   name?: unknown;
 }
 
+/**
+ * The three field rules, exported one by one rather than only as the whole-body validator: user
+ * administration validates the same fields in a different combination — an update may carry a name
+ * and no password at all — and a second copy of these rules would be a second password policy.
+ */
+export const emailRule: Validator<unknown> = all(
+  required('"email" is required'),
+  string('"email" must be a string'),
+  matches(EMAIL, '"email" must be a valid email address'),
+);
+
+export const passwordRule: Validator<unknown> = all(
+  required('"password" is required'),
+  string('"password" must be a string'),
+  minLength(
+    MIN_PASSWORD_LENGTH,
+    `"password" must be at least ${MIN_PASSWORD_LENGTH} characters`,
+  ),
+  maxLength(
+    MAX_PASSWORD_LENGTH,
+    `"password" must be at most ${MAX_PASSWORD_LENGTH} characters`,
+  ),
+);
+
+export const nameRule: Validator<unknown> = all(
+  string('"name" must be a string'),
+  maxLength(200, '"name" is too long'),
+);
+
 const credentialsValidator: Validator<RawCredentials> = object<RawCredentials>({
-  email: all(
-    required('"email" is required'),
-    string('"email" must be a string'),
-    matches(EMAIL, '"email" must be a valid email address'),
-  ),
-  password: all(
-    required('"password" is required'),
-    string('"password" must be a string'),
-    minLength(
-      MIN_PASSWORD_LENGTH,
-      `"password" must be at least ${MIN_PASSWORD_LENGTH} characters`,
-    ),
-    maxLength(
-      MAX_PASSWORD_LENGTH,
-      `"password" must be at most ${MAX_PASSWORD_LENGTH} characters`,
-    ),
-  ),
-  name: optional(
-    all(string('"name" must be a string'), maxLength(200, '"name" is too long')),
-  ),
+  email: emailRule,
+  password: passwordRule,
+  name: optional(nameRule),
 });
 
 /**
