@@ -1,0 +1,76 @@
+# Load benchmarks on a hosted runner: a Linux box nobody else is using, so the numbers are
+# comparable run to run. Hosted runners are still shared VMs (expect ~10-20% run-to-run noise on
+# absolute numbers); the `reference` job measures bare node / the bridge / fastify on the same
+# runner, and the ratio of the SUT to those is what stays stable. For sub-5% noise use a
+# self-hosted runner on a dedicated VPS (`runs-on: [self-hosted, bench]`).
+name: bench
+
+on:
+  workflow_dispatch:
+    inputs:
+      connections:
+        description: Concurrency sweep for get-record / insert / auth-session
+        default: "1,8,32,64,128,256,512,1024"
+      subscribers:
+        description: SSE subscriber levels for sse-fanout
+        default: "0,100,1000,5000"
+      duration:
+        description: Seconds measured per level
+        default: "10"
+      scenarios:
+        description: Comma-separated subset (empty = all)
+        default: ""
+  schedule:
+    - cron: "0 3 * * 1" # Mondays 03:00 UTC, when the runner pool is quietest
+
+env:
+  MONGOMS_DISABLE_POSTINSTALL: "1"
+  CONNECTIONS: ${{ inputs.connections || '1,8,32,64,128,256,512,1024' }}
+  SUBSCRIBERS: ${{ inputs.subscribers || '0,100,1000,5000' }}
+  DURATION: ${{ inputs.duration || '10' }}
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+
+      - name: Load, memory adapter (SUT in docker, cpus 1 / mem 1g)
+        run: |
+          ulimit -n 65536
+          pnpm bench -- --connections "$CONNECTIONS" --subscribers "$SUBSCRIBERS" --duration "$DURATION" \
+            ${{ inputs.scenarios && format('--scenarios {0}', inputs.scenarios) || '' }}
+
+      - name: Load, mongo adapter (open scenarios)
+        if: ${{ !inputs.scenarios }}
+        run: |
+          ulimit -n 65536
+          pnpm bench -- --adapter mongo --connections "$CONNECTIONS" --duration "$DURATION" \
+            --scenarios get-record,list-page,list-filtered,get-global,openapi,update,insert,mixed-crud
+
+      - name: Reference servers (bare node, bridge, fastify) under the same budget
+        run: pnpm --filter @shuri/benchmarking bench:reference -- --connections 32,64 --duration "$DURATION"
+
+      - name: Micro benchmarks (in-process)
+        run: pnpm bench:micro | tee benchmarking/results/micro.txt
+
+      - name: Summary
+        if: always()
+        run: |
+          for f in benchmarking/results/*/report.md; do cat "$f" >> "$GITHUB_STEP_SUMMARY"; echo >> "$GITHUB_STEP_SUMMARY"; done
+          { echo '```'; cat benchmarking/results/micro.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bench-results-${{ github.run_number }}
+          path: benchmarking/results
+          retention-days: 90
