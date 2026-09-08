@@ -20,9 +20,17 @@ StoreRecord>` (one table per slug) and globals in a single `Map<slug, RecordInpu
   sort (compares `number`/`string`/`boolean`; mismatched types tie), `applyQuery` chains filter ->
   sort -> offset -> limit. `insert` generates the `id` via `randomUUID()`; `update` does a shallow
   merge and throws `RecordNotFoundError` if the id doesn't exist.
+- **Indexes** — a field declared `index: true` gets a secondary index (`Map<value, Set<id>>`),
+  kept in step by `insert`/`update`/`delete`. A `findMany`/`count` whose `where` has an `eq`
+  filter on such a field starts from that value's records instead of the whole table (the other
+  filters still apply); this is what makes `@shuri/auth`'s per-request session lookup O(1)
+  instead of O(sessions). Only `eq` uses the index — sorting and range filters still scan.
+- **No table copy for the plain page** — a `findMany` with neither `where` nor `orderBy` pages
+  straight off the table iterator (`page`), and `count` without `where` is arithmetic on
+  `size`, so `GET /collections/x?limit=20` costs the page, not the table.
 
 ## Role in the monorepo
 
-The `StoreAdapter` used by `@shuri/demo` and in `@shuri/api`/`@shuri/sdk` integration tests. A real
-engine (sqlite, postgres, ...) would follow the same `StoreAdapter` contract, swapping the in-memory
-implementation for native queries.
+The `StoreAdapter` used by `@shuri/demo` and in `@shuri/api`/`@shuri/sdk` integration tests. `@shuri/store-mongo` is the
+real-engine counterpart: same `StoreAdapter` contract, with the `Query` AST translated to native
+MongoDB queries.

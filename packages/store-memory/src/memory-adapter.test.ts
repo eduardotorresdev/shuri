@@ -153,3 +153,111 @@ describe("createMemoryAdapter", () => {
     });
   });
 });
+
+describe("createMemoryAdapter where", () => {
+  it("ANDs several filters on the same field", async () => {
+    const adapter = createMemoryAdapter();
+    await adapter.insert(services, { name: "Cheap", price: 5 });
+    const mid = await adapter.insert(services, { name: "Mid", price: 50 });
+    await adapter.insert(services, { name: "Dear", price: 500 });
+
+    const found = await adapter.findMany(services, {
+      where: {
+        price: [
+          { op: "gt", value: 10 },
+          { op: "lt", value: 100 },
+        ],
+      },
+    });
+    expect(found).toEqual([mid]);
+  });
+});
+
+const sessions: CollectionSchema = {
+  slug: "sessions",
+  title: "Sessions",
+  singular: "Session",
+  plural: "Sessions",
+  fields: [
+    { type: "text", name: "tokenHash", required: true, index: true },
+    { type: "text", name: "user", required: true },
+  ],
+};
+
+describe("createMemoryAdapter indexes", () => {
+  let adapter: StoreAdapter;
+
+  beforeEach(async () => {
+    adapter = createMemoryAdapter();
+    await adapter.insert(sessions, { tokenHash: "a", user: "ada" });
+    await adapter.insert(sessions, { tokenHash: "b", user: "ada" });
+    await adapter.insert(sessions, { tokenHash: "b", user: "bob" });
+  });
+
+  it("answers an eq filter on an indexed field with exactly the records holding the value", async () => {
+    const found = await adapter.findMany(sessions, {
+      where: { tokenHash: { op: "eq", value: "b" } },
+    });
+    expect(found.map((record) => record["user"]).toSorted()).toEqual(["ada", "bob"]);
+    expect(
+      await adapter.findMany(sessions, {
+        where: { tokenHash: { op: "eq", value: "zzz" } },
+      }),
+    ).toEqual([]);
+  });
+
+  it("still applies the other filters to the indexed candidates", async () => {
+    const found = await adapter.findMany(sessions, {
+      where: { tokenHash: { op: "eq", value: "b" }, user: { op: "eq", value: "bob" } },
+    });
+    expect(found).toHaveLength(1);
+    expect(found[0]?.["user"]).toBe("bob");
+  });
+
+  it("follows an update that moves a record to another indexed value", async () => {
+    const [record] = await adapter.findMany(sessions, {
+      where: { tokenHash: { op: "eq", value: "a" } },
+    });
+    await adapter.update(sessions, (record as { id: string }).id, { tokenHash: "c" });
+
+    expect(
+      await adapter.findMany(sessions, {
+        where: { tokenHash: { op: "eq", value: "a" } },
+      }),
+    ).toEqual([]);
+    expect(
+      await adapter.findMany(sessions, {
+        where: { tokenHash: { op: "eq", value: "c" } },
+      }),
+    ).toHaveLength(1);
+  });
+
+  it("forgets a deleted record", async () => {
+    const [record] = await adapter.findMany(sessions, {
+      where: { tokenHash: { op: "eq", value: "a" } },
+    });
+    await adapter.delete(sessions, (record as { id: string }).id);
+
+    expect(
+      await adapter.findMany(sessions, {
+        where: { tokenHash: { op: "eq", value: "a" } },
+      }),
+    ).toEqual([]);
+    expect(await adapter.count(sessions)).toBe(2);
+  });
+
+  it("pages an unfiltered, unsorted query in insertion order", async () => {
+    const pageOne = await adapter.findMany(sessions, { limit: 2 });
+    const pageTwo = await adapter.findMany(sessions, { offset: 2, limit: 2 });
+    expect(pageOne.map((record) => record["tokenHash"])).toEqual(["a", "b"]);
+    expect(pageTwo.map((record) => record["tokenHash"])).toEqual(["b"]);
+    expect(await adapter.findMany(sessions, { limit: 0 })).toEqual([]);
+  });
+
+  it("counts an unfiltered query honouring offset and limit", async () => {
+    expect(await adapter.count(sessions)).toBe(3);
+    expect(await adapter.count(sessions, { offset: 1 })).toBe(2);
+    expect(await adapter.count(sessions, { offset: 1, limit: 1 })).toBe(1);
+    expect(await adapter.count(sessions, { offset: 5 })).toBe(0);
+  });
+});

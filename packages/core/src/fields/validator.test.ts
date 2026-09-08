@@ -123,3 +123,21 @@ describe("fieldsValidator", () => {
     expect(issues).toEqual([]);
   });
 });
+
+describe("index", () => {
+  it("accepts a boolean", () => {
+    const issues = validate<Field>(
+      { type: "text", name: "tokenHash", index: true },
+      fieldValidator(new Set()),
+    );
+    expect(issues).toEqual([]);
+  });
+
+  it("rejects a non-boolean", () => {
+    const issues = validate<Field>(
+      { type: "text", name: "tokenHash", index: "yes" as unknown as boolean },
+      fieldValidator(new Set()),
+    );
+    expect(issues).toEqual([{ path: "index", message: '"index" must be a boolean' }]);
+  });
+});
