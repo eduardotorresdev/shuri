@@ -21,7 +21,7 @@ export const usersCollection = {
   plural: "Users",
   internal: true,
   fields: [
-    { type: "email", name: "email", required: true },
+    { type: "email", name: "email", required: true, index: true },
     { type: "text", name: "name" },
     { type: "text", name: "passwordHash", hidden: true },
     { type: "boolean", name: "emailVerified" },
@@ -37,7 +37,8 @@ export const usersCollection = {
 
 /**
  * One row per live session. Only the SHA-256 of the token is stored: a database dump can't be
- * replayed as a set of valid sessions. No salt and no stretching on that digest — 256 uniform bits
+ * replayed as a set of valid sessions. `tokenHash` is indexed: it is looked up on **every
+ * authenticated request**, and without the index that lookup is a scan of every live session. No salt and no stretching on that digest — 256 uniform bits
  * have no dictionary to attack, and stretching would add latency to *every* authenticated request.
  */
 export const sessionsCollection = {
@@ -47,7 +48,14 @@ export const sessionsCollection = {
   plural: "Sessions",
   internal: true,
   fields: [
-    { type: "text", name: "tokenHash", required: true, minLength: 43, maxLength: 43 },
+    {
+      type: "text",
+      name: "tokenHash",
+      required: true,
+      minLength: 43,
+      maxLength: 43,
+      index: true,
+    },
     { type: "relation", name: "user", collection: "users", required: true },
     {
       type: "number",
@@ -77,7 +85,7 @@ export const accountsCollection = {
   internal: true,
   fields: [
     { type: "text", name: "provider", required: true },
-    { type: "text", name: "subject", required: true },
+    { type: "text", name: "subject", required: true, index: true },
     { type: "relation", name: "user", collection: "users", required: true },
     {
       type: "number",
@@ -104,7 +112,7 @@ export const oidcCredentialsCollection = {
   plural: "OIDC Credentials",
   internal: true,
   fields: [
-    { type: "text", name: "provider", required: true },
+    { type: "text", name: "provider", required: true, index: true },
     { type: "text", name: "clientId", required: true },
     { type: "text", name: "clientSecret", hidden: true },
     { type: "text", name: "redirectUri", required: true },
@@ -113,8 +121,78 @@ export const oidcCredentialsCollection = {
 } as const satisfies CollectionSchema;
 
 /**
- * The four collections auth needs, in declaration order — `users` first, since the others carry a
- * `relation` to it.
+ * A machine client for the OAuth2 client-credentials grant (RFC 6749 §4.4). Only the SHA-256 of its
+ * secret is stored, on the same reasoning as `_sessions.tokenHash`: the secret is 32 uniform random
+ * bytes, so there is no dictionary to attack and nothing to gain from stretching. `roles` is a
+ * space-separated list — the same shape OAuth2 gives `scope` — each name resolved against
+ * `AuthConfig.clients.roles` when a token is issued. `revokedAt` set means no token can be issued or
+ * resolved for it anymore; the row stays, for the audit trail.
+ */
+export const clientsCollection = {
+  slug: "_clients",
+  title: "API Clients",
+  singular: "API Client",
+  plural: "API Clients",
+  internal: true,
+  fields: [
+    { type: "text", name: "name", required: true },
+    { type: "text", name: "clientId", required: true, index: true },
+    { type: "text", name: "secretHash", hidden: true },
+    { type: "text", name: "roles" },
+    {
+      type: "number",
+      name: "createdAt",
+      kind: "integer",
+      sign: "positive",
+      required: true,
+    },
+    { type: "number", name: "revokedAt", kind: "integer", sign: "positive" },
+  ],
+} as const satisfies CollectionSchema;
+
+/**
+ * One row per live client token, hashed like a session token. `scope` holds the **patterns the
+ * token was requested with** (space-separated, e.g. `posts:*`), absent for "everything the roles
+ * grant"; expansion happens on every resolve, against the current schema and the client's current
+ * roles, so neither a new collection nor a trimmed role needs a reissue.
+ */
+export const clientTokensCollection = {
+  slug: "_client_tokens",
+  title: "Client Tokens",
+  singular: "Client Token",
+  plural: "Client Tokens",
+  internal: true,
+  fields: [
+    {
+      type: "text",
+      name: "tokenHash",
+      required: true,
+      minLength: 43,
+      maxLength: 43,
+      index: true,
+    },
+    { type: "relation", name: "client", collection: "_clients", required: true },
+    { type: "text", name: "scope" },
+    {
+      type: "number",
+      name: "createdAt",
+      kind: "integer",
+      sign: "positive",
+      required: true,
+    },
+    {
+      type: "number",
+      name: "expiresAt",
+      kind: "integer",
+      sign: "positive",
+      required: true,
+    },
+  ],
+} as const satisfies CollectionSchema;
+
+/**
+ * The six collections auth needs, in declaration order — `users` and `_clients` before the ones
+ * carrying a `relation` to them.
  *
  * A plain constant, not a factory: `InferCollection` reads the literal slugs off it, which is what
  * types `app.auth` and keeps `@shuri/sdk`'s merge a one-liner. Renaming these slugs per host would
@@ -125,6 +203,8 @@ export const authCollections = [
   sessionsCollection,
   accountsCollection,
   oidcCredentialsCollection,
+  clientsCollection,
+  clientTokensCollection,
 ] as const;
 
 /** The slugs `@shuri/auth` claims, which a consumer's own collections must not reuse. */

@@ -3,24 +3,28 @@
 Authentication for a Shuri app: signup, login, logout and current-session by email and password, plus
 sign-in through OIDC providers the host declares — either a fully static config, or a `{ id, preset }`
 slot (Google and Microsoft ship as presets) whose `clientId`/`clientSecret`/`redirectUri` an admin
-fills in through `_oidc_credentials` instead of code. The four collections it needs live in the
-**same** `Core`/`Store`/adapter as the app's own, so they get the same validation, the same event bus,
-and work on any engine with no second port to configure.
+fills in through `_oidc_credentials` instead of code — plus machine-to-machine auth through the
+OAuth2 client-credentials grant (`POST /auth/token`), with scopes derived from the schema. The six
+collections it needs live in the **same** `Core`/`Store`/adapter as the app's own, so they get the
+same validation, the same event bus, and work on any engine with no second port to configure.
 
 Zero third-party dependencies, like the rest of the repo: PBKDF2, HMAC and SHA-256 come from
 WebCrypto, and base64url and cookies are written here.
 
-Scope of this round is **authentication only**. Per-collection rules/RBAC, email verification and
-password reset are deliberately out (see "Deliberately absent" below).
+This package **identifies**; it doesn't decide. `AuthApi.principal(request)` answers _who_ is asking
+(`anonymous` / `user` / `client` with scopes) in the vocabulary `@shuri/api`'s `access/` guards
+speak, and `@shuri/core`'s `access/policy.ts` decides what that principal may do. Email verification
+and password reset are deliberately out (see "Deliberately absent" below).
 
 ## Tree
 
 ```
 src/
   index.ts                    re-exports the public surface
-  collections.ts               users / _sessions / _accounts / _oidc_credentials, all internal: true
-  config.ts                     AuthConfig -> AuthContext: defaults, bound collections, OIDC runtime
+  collections.ts               users / _sessions / _accounts / _oidc_credentials / _clients / _client_tokens, all internal: true
+  config.ts                     AuthConfig -> AuthContext: defaults, bound collections, OIDC runtime, clients
   create.ts                      createAuth -> AuthApi; assertNoAuthSlugCollision
+  principal.ts                    resolvePrincipal: request -> Principal (sct_ bearer -> client, else session -> user)
   errors.ts                       every error, all extending ApiError/IssuesApiError
   types.ts                         AuthUser, AuthSession, IssuedSession, SessionMetadata, Now
   test-support.ts                   createAuthStore/createTestHasher/createClock/readSetCookie
@@ -48,6 +52,10 @@ src/
   users/
     service.ts                   findByEmail/findById/create/update, normalizeEmail
     public.ts                     toPublicUser — whitelists from the schema
+  clients/
+    validators.ts                assertValidClientsConfig (roles -> scope patterns), assertKnownRoles
+    service.ts                    createClientService: create/list/get/findByClientId/revoke/rotateSecret/verify/allowedScopes
+    tokens.ts                     createClientTokenService: issue/resolve/pruneExpired; CLIENT_TOKEN_PREFIX
   credentials/
     validators.ts                parseCredentials
     signup.ts                     signUp + CredentialsContext
@@ -69,6 +77,9 @@ src/
   routes/
     handler.ts                   createAuthHandler: the falling handler
     signup.ts / login.ts / logout.ts / me.ts
+    token.ts                       handleToken: the client-credentials grant, RFC 6749 §4.4 / §5.2
+  docs/
+    openapi.ts                   authOpenApi: the /auth/* path items + cookie/bearer/oauth2 security schemes
     oidc-start.ts                  requireProvider/resolveProvider, handleOidcStart
     oidc-callback.ts               handleOidcCallback
     session-response.ts / metadata.ts
@@ -79,18 +90,21 @@ src/
     oidc-flow.test.ts             start -> callback against a stubbed fetch
     oidc-transaction.test.ts      every way a transaction fails, failing identically
     oidc-provider-slots.test.ts   a { id, preset } provider completed from _oidc_credentials
+    client-credentials.test.ts    create client -> token with scope -> every RFC error -> expiry
+    principal.test.ts             cookie / bearer / sct_ bearer / nothing -> Principal
 ```
 
 ## The routes
 
-| Method | Path                            | Success                  | Errors                            |
-| ------ | ------------------------------- | ------------------------ | --------------------------------- |
-| POST   | `/auth/signup`                  | 201 `{ user }` + cookie  | 400 · 405 · 409 · 415             |
-| POST   | `/auth/login`                   | 200 `{ user }` + cookie  | 400 · **401 generic** · 405 · 415 |
-| POST   | `/auth/logout`                  | 204 + clearing cookie    | 405                               |
-| GET    | `/auth/me`                      | 200 `{ user }`           | 401 · 405                         |
-| GET    | `/auth/oidc/:provider`          | 302 + transaction cookie | 404 · 405 · 500 · 502             |
-| GET    | `/auth/oidc/:provider/callback` | 302 + session cookie     | 400 · 403 · 404 · 500 · 502       |
+| Method | Path                            | Success                                               | Errors                                                                                                  |
+| ------ | ------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| POST   | `/auth/signup`                  | 201 `{ user }` + cookie                               | 400 · 405 · 409 · 415                                                                                   |
+| POST   | `/auth/login`                   | 200 `{ user }` + cookie                               | 400 · **401 generic** · 405 · 415                                                                       |
+| POST   | `/auth/logout`                  | 204 + clearing cookie                                 | 405                                                                                                     |
+| GET    | `/auth/me`                      | 200 `{ user }`                                        | 401 · 405                                                                                               |
+| POST   | `/auth/token`                   | 200 `{ access_token, token_type, expires_in, scope }` | 400 `invalid_request`/`unsupported_grant_type`/`invalid_scope` · **401 `invalid_client` generic** · 405 |
+| GET    | `/auth/oidc/:provider`          | 302 + transaction cookie                              | 404 · 405 · 500 · 502                                                                                   |
+| GET    | `/auth/oidc/:provider/callback` | 302 + session cookie                                  | 400 · 403 · 404 · 500 · 502                                                                             |
 
 `basePath` defaults to `/auth`; anything outside it returns `undefined`, the same fall-through
 contract `@shuri/api`'s handlers follow.
@@ -113,19 +127,50 @@ contract `@shuri/api`'s handlers follow.
   served `_oidc_credentials` would hand out every configured `clientId` (and, absent `hidden` on
   `clientSecret`, the secrets themselves) to an unauthenticated caller. Reached only through
   `AuthApi.oidcCredentials`; a host wires it up behind its own authenticated admin route.
+- **clients/ + routes/token.ts — client credentials, RFC 6749 §4.4.** A `_clients` row holds a
+  `clientId`, the SHA-256 of its `scs_`-prefixed secret (same reasoning as session tokens: 256
+  uniform bits have no dictionary, and stretching would only add latency), and a space-separated
+  list of **roles**; `AuthConfig.clients.roles` maps each role to scope patterns (`*`, `posts:*`,
+  `*:list`, `posts:list`). Scopes themselves are never declared: `@shuri/sdk` computes the universe
+  with `derivedScopes(core)` and passes it as `scopes`, and a token's `scope` is the roles
+  **expanded** against it at issuance (`expandScopes`), narrowed by the requested `scope` if any — a
+  request for a scope the roles don't grant, or one the schema doesn't define, is `invalid_scope`.
+  That is the "RBAC with no code": the host writes `roles: { integrator: ["posts:*"] }` and every
+  route checks `<slug>:<op>` on its own. The bearer is `sct_` + 32 random bytes, stored hashed in
+  `_client_tokens` with the expanded scope, 1h by default; the prefix is what lets
+  `resolvePrincipal` pick the table in O(1) and what makes a leaked token greppable. The row stores
+  the **requested patterns**, not the expansion: `resolve` expands them against the _current_
+  schema and the client's _current_ roles on every request, so a token issued with `posts:*` covers
+  an op added since, and a role trimmed in config shrinks every live token at once — no reissue,
+  no stale grants. The endpoint
+  takes form-encoded (the RFC) or JSON, client auth by `Authorization: Basic` (each half
+  URL-encoded, §2.3.1) or `client_id`/`client_secret` in the body, answers with
+  `Cache-Control: no-store`, and every error in the §5.2 shape. **Wrong secret, unknown id and
+  revoked client all answer the same `invalid_client`**, after the same digest-and-compare — the
+  endpoint is on the open internet and must not say which clients exist. `revoke` deletes the
+  client's live tokens; `rotateSecret` doesn't (they expire on their own). Client management is
+  programmatic (`AuthApi.clients`), like `oidcCredentials`: behind the host's own admin route.
+- **docs/openapi.ts** — `AuthApi.openapi` is what closes the gap between `/openapi.json` and the
+  routes actually served: the `/auth/*` path items, plus three `securitySchemes` (the session cookie
+  as `apiKey` in `cookie`, the same session as `http` bearer, and an `oauth2` `clientCredentials`
+  flow pointing at `{basePath}/token` with every derived scope) and a `requirements(scope)` that
+  every guarded operation gets, naming the exact `<slug>:<op>` a client token must hold.
+  `@shuri/sdk` hands both to `createOpenApiHandler`'s `paths`/`security`.
+- **principal.ts** — `resolvePrincipal` never throws: it answers `ANONYMOUS` for no credential and
+  for one that doesn't resolve alike. Whether anonymous is enough is the policy's call.
 - **oidc/config.ts + oidc/credentials.ts — two ways to declare a provider.** A fully static
   `OidcProviderConfig` (own `clientId`/`clientSecret`/`redirectUri`) is validated and resolved once at
   boot by `oidcProvider`, exactly as before. A `OidcProviderSlot` (`{ id, preset }`) is validated at
   boot by `oidcProviderSlot` — id shape and preset name only, since it carries no credentials — and
   completed by `resolveProviderSlot` on **every** sign-in, reading its `_oidc_credentials` row fresh:
-  deliberately uncached, unlike `discovery.ts`'s hour-long cache, which exists to spare a *network*
+  deliberately uncached, unlike `discovery.ts`'s hour-long cache, which exists to spare a _network_
   round trip. This is one local store read, on a route that is about to make one anyway (the session
   insert after a successful callback). The two are told apart structurally
   (`isProviderSlot`/`ProviderDeclaration`) — a slot never carries `clientId`, a static config always
   does — so no extra discriminant tag was needed. A slot whose row doesn't exist yet answers the same
   404 as an undeclared provider (`UnknownProviderError`); a slot whose row is missing something its
   preset needs (`microsoft` without `tenant`) answers 500 (`IncompleteOidcCredentialsError`) — the
-  provider is declared and even has a row, just not a *usable* one.
+  provider is declared and even has a row, just not a _usable_ one.
 - **password/** — PBKDF2-HMAC-SHA256 at 600k iterations behind a `PasswordHasher` port, so a Node
   host can plug argon2 in. The stored format is self-describing, and `verify` reads iterations, salt
   and key length **from the stored hash**, never from the current config: raising the cost next year
@@ -215,8 +260,9 @@ why the bearer header takes precedence over the cookie.
 ## Role in the monorepo
 
 `@shuri/sdk`'s `create()` merges `authCollections` into the schema _before_ `createCore`, then builds
-the service with `createAuth({ store, ...config.auth })` and prepends `auth.handler` to
-`createHandler`'s chain. That works because this package is two separable things: a **static
+the service with `createAuth({ store, scopes: derivedScopes(core), ...config.auth })`, prepends
+`auth.handler` to `createHandler`'s chain and hands `auth.principal` to it as the `access`
+resolver — which is what turns every `access` rule on. That works because this package is two separable things: a **static
 constant** of schemas that depends on nothing, and a **service** bound to a store. `createAuth` takes
 `Pick<Store, "collection">` — the same minimal structural shape `@shuri/api`'s handlers take — so
 nothing here depends on `@shuri/sdk`, and the dependency order stays
@@ -224,16 +270,18 @@ nothing here depends on `@shuri/sdk`, and the dependency order stays
 
 ## Deliberately absent
 
-- **RBAC / per-collection rules** — separate work. It is what will let `users` be served again.
+- **Roles or scopes on users** — on purpose. A user is Payload-style: any signed-in user may do
+  anything a collection's `access` rule doesn't forbid, and the rule sees `ctx.user` to decide.
+  RBAC-by-scope exists for **clients only**, because a client is provisioned explicitly.
+- **HTTP routes for client management** — `AuthApi.clients` is programmatic; an admin surface is
+  its own round.
+- **`users` served by default** — still `internal: true`; a host may now serve it _safely_ with
+  `{ ...usersCollection, internal: false, access: { list: false, view: (ctx) => ... } }`.
 - **Email verification and password reset** — both need an email-sending port. Their absence is why
   signup's 409 still reveals that an address is registered: closing that leak means always answering
   201 and mailing a notice.
 - **Sign out everywhere** — cheap when wanted:
   `findMany({ where: { user: { op: "eq", value: userId } } })` and delete.
-- **`/auth/*` in the OpenAPI document** — `buildOpenApiDocument` only knows the core and the three
-  base paths, so the auth routes don't appear in `/openapi.json`. That weakens the documented
-  invariant that the document describes the routes actually served; the fix (auth exports a paths
-  fragment, `createOpenApiHandler` gains a `paths?` to merge) is purely additive.
 - **JWKS / RS256 verification** — unnecessary under direct exchange, as above.
 - **An Apple preset** — Apple's "client secret" isn't a stored string: it's a JWT signed ES256 with a
   Team ID, a Key ID and a private key, expiring and needing rotation. Neither `_oidc_credentials`

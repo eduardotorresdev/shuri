@@ -133,7 +133,10 @@ const slotValidator: Validator<OidcProviderSlot> = object<OidcProviderSlot>({
   ),
   preset: all(
     required('"preset" is required'),
-    oneOf(PRESET_NAMES, (value) => `"preset" must be one of ${PRESET_NAMES.join(", ")}, got "${value}"`),
+    oneOf(
+      PRESET_NAMES,
+      (value) => `"preset" must be one of ${PRESET_NAMES.join(", ")}, got "${value}"`,
+    ),
   ),
   scopes: optional(
     array<string>(required("a scope must not be empty")) as Validator<readonly string[]>,

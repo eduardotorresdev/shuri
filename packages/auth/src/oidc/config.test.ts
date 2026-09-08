@@ -76,7 +76,11 @@ describe("oidcProvider", () => {
       oidcProvider({ ...base, tokenAuthMethod: "client_secret_post" }),
     ).toThrow(OidcConfigError);
     expect(() =>
-      oidcProvider({ ...base, tokenAuthMethod: "client_secret_post", clientSecret: "s3cret" }),
+      oidcProvider({
+        ...base,
+        tokenAuthMethod: "client_secret_post",
+        clientSecret: "s3cret",
+      }),
     ).not.toThrow();
   });
 });
@@ -90,15 +94,15 @@ describe("oidcProviderSlot", () => {
   });
 
   it("refuses an unknown preset", () => {
-    expect(() =>
-      oidcProviderSlot({ id: "acme", preset: "acme" as never }),
-    ).toThrow(OidcConfigError);
+    expect(() => oidcProviderSlot({ id: "acme", preset: "acme" as never })).toThrow(
+      OidcConfigError,
+    );
   });
 
   it("refuses an id that wouldn't survive a URL path segment", () => {
-    expect(() =>
-      oidcProviderSlot({ id: "Google Inc", preset: "google" }),
-    ).toThrow(OidcConfigError);
+    expect(() => oidcProviderSlot({ id: "Google Inc", preset: "google" })).toThrow(
+      OidcConfigError,
+    );
   });
 });
 

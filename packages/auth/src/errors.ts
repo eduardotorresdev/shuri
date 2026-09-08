@@ -19,13 +19,11 @@ export class AuthenticationFailedError extends ApiError {
   }
 }
 
-/** No usable session on the request: no cookie, no bearer, or one that no longer resolves. */
-export class UnauthenticatedError extends ApiError {
-  constructor() {
-    super(401, "Not authenticated");
-    this.name = "UnauthenticatedError";
-  }
-}
+/**
+ * No usable session on the request. Declared in `@shuri/api` (its access guards throw it) and
+ * re-exported here under the same name, so nothing that imported it from this package changes.
+ */
+export { UnauthenticatedError } from "@shuri/api";
 
 /**
  * Signup hit an email already registered. This does leak that the address exists — closing it means
@@ -157,5 +155,54 @@ export class OidcConfigError extends ValidationError {
   constructor(issues: Issue[]) {
     super(issues);
     this.name = "OidcConfigError";
+  }
+}
+
+/**
+ * A token-endpoint failure in the shape RFC 6749 §5.2 prescribes: `message` **is** the error code
+ * (`invalid_client`, `invalid_scope`, `unsupported_grant_type`, `invalid_request`), so the body reads
+ * `{ error: "<code>" }`. A revoked client and a wrong secret both answer `invalid_client`, on purpose:
+ * the endpoint is open to the internet and must not say which clients exist.
+ */
+export class OAuthTokenError extends ApiError {
+  constructor(
+    status: number,
+    public readonly code: string,
+    public readonly description?: string,
+  ) {
+    super(status, code);
+    this.name = "OAuthTokenError";
+  }
+}
+
+/** A requested scope isn't defined by the schema, or isn't granted to the client's roles. */
+export class InvalidScopeError extends OAuthTokenError {
+  constructor(scope: string) {
+    super(400, "invalid_scope", `Scope "${scope}" is not granted to this client`);
+    this.name = "InvalidScopeError";
+  }
+}
+
+/** `issueClientToken` was asked for a client that doesn't exist or was revoked. Programmatic only; the HTTP route answers `invalid_client`. */
+export class UnknownClientError extends ApiError {
+  constructor(clientId: string) {
+    super(404, `Unknown or revoked client "${clientId}"`);
+    this.name = "UnknownClientError";
+  }
+}
+
+/** `AuthConfig.clients` is malformed (a role's pattern isn't a scope pattern, ...). Thrown at config time. */
+export class ClientsConfigError extends ValidationError {
+  constructor(issues: Issue[]) {
+    super(issues);
+    this.name = "ClientsConfigError";
+  }
+}
+
+/** A client was given a role `AuthConfig.clients.roles` doesn't declare. */
+export class UnknownRoleError extends ValidationError {
+  constructor(issues: Issue[]) {
+    super(issues);
+    this.name = "UnknownRoleError";
   }
 }

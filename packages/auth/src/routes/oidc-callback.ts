@@ -1,7 +1,11 @@
 import { MethodNotAllowedError, toErrorResponse } from "@shuri/api";
 import type { AuthContext } from "../config.js";
 import { timingSafeEqual } from "../crypto/equal.js";
-import { OAuthTransactionError, OidcProviderError, UnknownProviderError } from "../errors.js";
+import {
+  OAuthTransactionError,
+  OidcProviderError,
+  UnknownProviderError,
+} from "../errors.js";
 import { clearCookie, readCookie } from "../http/cookie.js";
 import { safeRedirect } from "../http/redirect.js";
 import { assertValidClaims, decodeIdToken } from "../oidc/id-token.js";

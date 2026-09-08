@@ -7,6 +7,7 @@ import { handleMe } from "./me.js";
 import { handleOidcCallback } from "./oidc-callback.js";
 import { handleOidcStart } from "./oidc-start.js";
 import { handleSignup } from "./signup.js";
+import { handleToken } from "./token.js";
 
 /**
  * The package's HTTP surface: one falling handler serving every auth route under `basePath` and
@@ -34,6 +35,8 @@ export function createAuthHandler(context: AuthContext): FallingHandler {
           return await handleLogout(context, request);
         case "me":
           return await handleMe(context, request);
+        case "token":
+          return await handleToken(context, request);
         case "oidc-start":
           return await handleOidcStart(context, request, route.provider as string);
         case "oidc-callback":

@@ -10,7 +10,9 @@ let credentials: CollectionStore<RecordInput>;
 
 beforeEach(() => {
   store = createAuthStore();
-  credentials = store.collection("_oidc_credentials" as never) as CollectionStore<RecordInput>;
+  credentials = store.collection(
+    "_oidc_credentials" as never,
+  ) as CollectionStore<RecordInput>;
 });
 
 describe("resolveProviderSlot", () => {

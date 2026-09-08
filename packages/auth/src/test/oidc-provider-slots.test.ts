@@ -8,7 +8,12 @@ import {
   type FetchStub,
 } from "../oidc/test-support.js";
 import { TRANSACTION_COOKIE_NAME } from "../oidc/transaction.js";
-import { createAuthStore, createClock, createTestHasher, readSetCookie } from "../test-support.js";
+import {
+  createAuthStore,
+  createClock,
+  createTestHasher,
+  readSetCookie,
+} from "../test-support.js";
 
 /**
  * A slot-declared provider (`{ id, preset }`, no credentials in code) is completed from its
@@ -53,7 +58,9 @@ async function answer(request: Request): Promise<Response> {
 
 describe("a slot-declared provider", () => {
   it("404s when its _oidc_credentials row hasn't been created yet", async () => {
-    expect((await answer(new Request("http://localhost/auth/oidc/google"))).status).toBe(404);
+    expect((await answer(new Request("http://localhost/auth/oidc/google"))).status).toBe(
+      404,
+    );
   });
 
   it("signs in once an admin fills in its credentials", async () => {
@@ -75,7 +82,9 @@ describe("a slot-declared provider", () => {
     const txCookie = readSetCookie(start, TRANSACTION_COOKIE_NAME) as string;
 
     stub.setTokens({
-      id_token: idToken(baseClaims(clock(), { iss: GOOGLE_ISSUER, aud: CLIENT_ID, nonce })),
+      id_token: idToken(
+        baseClaims(clock(), { iss: GOOGLE_ISSUER, aud: CLIENT_ID, nonce }),
+      ),
       token_type: "Bearer",
     });
 
@@ -120,7 +129,8 @@ describe("a slot-declared provider", () => {
     expect(
       cookies.some(
         (cookie) =>
-          cookie.startsWith(`${TRANSACTION_COOKIE_NAME}=`) && cookie.includes("Max-Age=0"),
+          cookie.startsWith(`${TRANSACTION_COOKIE_NAME}=`) &&
+          cookie.includes("Max-Age=0"),
       ),
     ).toBe(true);
   });

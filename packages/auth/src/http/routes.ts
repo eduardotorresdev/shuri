@@ -1,6 +1,6 @@
 /** The auth routes, resolved from a request path. */
 export type AuthRouteName =
-  "signup" | "login" | "logout" | "me" | "oidc-start" | "oidc-callback";
+  "signup" | "login" | "logout" | "me" | "token" | "oidc-start" | "oidc-callback";
 
 export interface AuthRoute {
   name: AuthRouteName;
@@ -26,7 +26,13 @@ export function matchAuthRoute(
 
   if (segments.length === 1) {
     const [name] = segments;
-    if (name === "signup" || name === "login" || name === "logout" || name === "me") {
+    if (
+      name === "signup" ||
+      name === "login" ||
+      name === "logout" ||
+      name === "me" ||
+      name === "token"
+    ) {
       return { name };
     }
     return undefined;

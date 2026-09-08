@@ -6,6 +6,10 @@ describe("matchAuthRoute", () => {
     expect(matchAuthRoute(`/auth/${name}`, "/auth")).toEqual({ name });
   });
 
+  it("matches the token route like the other single-segment ones", () => {
+    expect(matchAuthRoute("/auth/token", "/auth")).toEqual({ name: "token" });
+  });
+
   it("tolerates a trailing slash", () => {
     expect(matchAuthRoute("/auth/me/", "/auth")).toEqual({ name: "me" });
   });

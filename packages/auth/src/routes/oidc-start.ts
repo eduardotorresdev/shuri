@@ -53,7 +53,10 @@ export async function requireProvider(
 ): Promise<{ oidc: OidcRuntime; provider: ResolvedProvider }> {
   const oidc = context.oidc;
   if (!oidc) throw new UnknownProviderError(providerId);
-  return { oidc, provider: await resolveProvider(oidc, providerId, context.oidcCredentials) };
+  return {
+    oidc,
+    provider: await resolveProvider(oidc, providerId, context.oidcCredentials),
+  };
 }
 
 /**

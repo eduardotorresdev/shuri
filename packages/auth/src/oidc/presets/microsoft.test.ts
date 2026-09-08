@@ -25,8 +25,8 @@ describe("microsoftProvider", () => {
   });
 
   it("scopes the issuer to the tenant it was given", () => {
-    expect(
-      microsoftProvider({ ...base, tenant: "other-tenant" }).issuer,
-    ).toBe("https://login.microsoftonline.com/other-tenant/v2.0");
+    expect(microsoftProvider({ ...base, tenant: "other-tenant" }).issuer).toBe(
+      "https://login.microsoftonline.com/other-tenant/v2.0",
+    );
   });
 });

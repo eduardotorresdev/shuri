@@ -3,6 +3,13 @@ import type { CollectionStore, RecordInput, Store } from "@shuri/store";
 import type { CredentialsContext } from "./credentials/signup.js";
 import type { CookieOptions, ResolvedCookieOptions } from "./http/cookie.js";
 import { resolveCookieOptions } from "./http/cookie.js";
+import { createClientService, type ClientService } from "./clients/service.js";
+import {
+  createClientTokenService,
+  DEFAULT_CLIENT_TOKEN_TTL_MS,
+  type ClientTokenService,
+} from "./clients/tokens.js";
+import { assertValidClientsConfig } from "./clients/validators.js";
 import type { PasswordHasher } from "./password/hasher.js";
 import { createPbkdf2Hasher } from "./password/pbkdf2.js";
 import { createSessionCookies, type SessionCookies } from "./sessions/cookie.js";
@@ -42,6 +49,18 @@ export interface RedirectOptions {
   allowedOrigins?: readonly string[];
 }
 
+/** Machine-to-machine clients: which roles exist, and what each one may do. */
+export interface ClientsConfig {
+  /**
+   * Role name -> scope patterns (`*`, `posts:*`, `*:list`, `posts:list`). A client is given role
+   * names; a token it obtains carries the union of its roles, expanded against the scopes the schema
+   * defines — see `@shuri/core`'s `expandScopes`.
+   */
+  roles: Record<string, readonly string[]>;
+  /** How long a client token lives, in milliseconds. Defaults to 1 hour. */
+  tokenTtlMs?: number;
+}
+
 export interface AuthConfig {
   /** Prefix the auth routes are mounted under. Defaults to "/auth". */
   basePath?: string;
@@ -66,6 +85,18 @@ export interface AuthConfig {
    * `AuthApi.oidcCredentials`).
    */
   providers?: readonly ProviderDeclaration[];
+  /** Roles for client-credentials clients. Absent, `POST /auth/token` still exists but no client can hold a role. */
+  clients?: ClientsConfig;
+}
+
+/** `AuthConfig` plus what only the app knows: the scope universe the schema defines. */
+export interface ResolveAuthOptions extends AuthConfig {
+  /**
+   * Every concrete scope the schema gives rise to (`derivedScopes` in `@shuri/core`). `@shuri/sdk`
+   * computes it from the `Core`; a host calling `createAuth` directly passes its own, or leaves it
+   * empty and gets a token endpoint that grants nothing.
+   */
+  scopes?: readonly string[];
 }
 
 /**
@@ -98,6 +129,10 @@ export interface AuthContext {
   accounts: CollectionStore<RecordInput>;
   /** The `_oidc_credentials` collection a `OidcProviderSlot` is completed from. */
   oidcCredentials: CollectionStore<RecordInput>;
+  clients: ClientService;
+  clientTokens: ClientTokenService;
+  /** The scope universe client tokens are expanded against. */
+  scopes: readonly string[];
   credentials: CredentialsContext;
   cookies: SessionCookies;
   cookieOptions: ResolvedCookieOptions;
@@ -117,7 +152,7 @@ function collectionOf(
 }
 
 /**
- * Resolves the host's config into the services the routes run on: defaults filled in, the three auth
+ * Resolves the host's config into the services the routes run on: defaults filled in, the auth
  * collections bound, the cookie configuration resolved once and shared by everything that writes or
  * clears the session cookie.
  * @param store - The app store holding the auth collections.
@@ -127,7 +162,8 @@ function collectionOf(
 export function resolveAuthContext<
   T extends readonly CollectionSchema[],
   G extends readonly GlobalSchema[],
->(store: CollectionResolver<T, G>, config: AuthConfig): AuthContext {
+>(store: CollectionResolver<T, G>, config: ResolveAuthOptions): AuthContext {
+  assertValidClientsConfig(config.clients);
   const now = config.now ?? Date.now;
   const resolver = store as unknown as CollectionResolver<never, never>;
   const users = createUserService(collectionOf(resolver, "users"), now);
@@ -143,6 +179,22 @@ export function resolveAuthContext<
   const cookieOptions = resolveCookieOptions(config.cookie);
   const basePath = config.basePath ?? "/auth";
   const fetchImpl = config.fetch ?? globalThis.fetch;
+  const scopes = config.scopes ?? [];
+  const clientTokensStore = collectionOf(resolver, "_client_tokens");
+  const clients = createClientService({
+    clients: collectionOf(resolver, "_clients"),
+    tokens: clientTokensStore,
+    roles: config.clients?.roles ?? {},
+    scopes,
+    now,
+  });
+  const clientTokens = createClientTokenService({
+    tokens: clientTokensStore,
+    clients,
+    scopes,
+    now,
+    ttlMs: config.clients?.tokenTtlMs ?? DEFAULT_CLIENT_TOKEN_TTL_MS,
+  });
 
   return {
     basePath,
@@ -150,6 +202,9 @@ export function resolveAuthContext<
     sessions,
     accounts: collectionOf(resolver, "_accounts"),
     oidcCredentials: collectionOf(resolver, "_oidc_credentials"),
+    clients,
+    clientTokens,
+    scopes,
     credentials: { users, sessions, hasher: config.hasher ?? createPbkdf2Hasher() },
     cookies: createSessionCookies(cookieOptions, now),
     cookieOptions,

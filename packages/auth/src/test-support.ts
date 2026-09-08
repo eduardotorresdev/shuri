@@ -6,9 +6,9 @@ import { createPbkdf2Hasher } from "./password/pbkdf2.js";
 import type { PasswordHasher } from "./password/hasher.js";
 
 /**
- * A real `Store` over the four auth collections, backed by `@shuri/store-memory`. Real schema, real
+ * A real `Store` over the six auth collections, backed by `@shuri/store-memory`. Real schema, real
  * validation, real event bus — nothing about auth is worth testing against a fake store.
- * @returns A store declaring `users`, `_sessions`, `_accounts` and `_oidc_credentials`.
+ * @returns A store declaring `users`, `_sessions`, `_accounts`, `_oidc_credentials`, `_clients` and `_client_tokens`.
  */
 export function createAuthStore(): Store {
   return createStore(
@@ -57,4 +57,38 @@ export function readSetCookie(
   const header = response.headers.get("set-cookie");
   const match = header?.match(new RegExp(`(?:^|, )${name}=([^;]*)`));
   return match ? decodeURIComponent(match[1]) : undefined;
+}
+
+export interface TokenRequestInput {
+  clientId: string;
+  clientSecret: string;
+  /** The `scope` parameter, space-separated. Absent, the token carries everything the roles grant. */
+  scope?: string;
+  /** Defaults to `client_credentials`; set to something else to exercise the grant check. */
+  grantType?: string;
+  basePath?: string;
+}
+
+/**
+ * The `POST {basePath}/token` request a client-credentials client sends, RFC 6749 style: the client
+ * authenticates with `Authorization: Basic` and the grant travels form-encoded.
+ * @param input - The client's credentials and the parameters to send.
+ * @returns The request.
+ */
+export function tokenRequest(input: TokenRequestInput): Request {
+  const body = new URLSearchParams({
+    grant_type: input.grantType ?? "client_credentials",
+  });
+  if (input.scope !== undefined) body.set("scope", input.scope);
+  const basic = btoa(
+    `${encodeURIComponent(input.clientId)}:${encodeURIComponent(input.clientSecret)}`,
+  );
+  return new Request(`http://localhost${input.basePath ?? "/auth"}/token`, {
+    method: "POST",
+    headers: {
+      authorization: `Basic ${basic}`,
+      "content-type": "application/x-www-form-urlencoded",
+    },
+    body,
+  });
 }

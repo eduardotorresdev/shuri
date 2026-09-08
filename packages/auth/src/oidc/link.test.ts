@@ -60,7 +60,10 @@ describe("resolveOidcUser", () => {
   });
 
   it("links a verified email to an existing user whose own email is also verified", async () => {
-    const existing = await users.create({ email: "ada@example.com", emailVerified: true });
+    const existing = await users.create({
+      email: "ada@example.com",
+      emailVerified: true,
+    });
     const resolved = await resolveOidcUser(context, provider, claims());
 
     expect(resolved.id).toBe(existing.id);

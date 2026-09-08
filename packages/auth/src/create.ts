@@ -1,15 +1,23 @@
 import type { FallingHandler } from "@shuri/api";
-import type { CollectionSchema, GlobalSchema } from "@shuri/core";
+import type { CollectionSchema, GlobalSchema, Principal } from "@shuri/core";
 import type { CollectionStore, RecordId, RecordInput } from "@shuri/store";
 import { AUTH_SLUGS } from "./collections.js";
+import type { ClientService } from "./clients/service.js";
+import type { IssuedClientToken } from "./clients/tokens.js";
 import {
   resolveAuthContext,
-  type AuthConfig,
   type CollectionResolver,
+  type ResolveAuthOptions,
 } from "./config.js";
 import { signIn } from "./credentials/login.js";
 import { signUp } from "./credentials/signup.js";
-import { AuthSlugCollisionError, UnauthenticatedError } from "./errors.js";
+import {
+  AuthSlugCollisionError,
+  UnauthenticatedError,
+  UnknownClientError,
+} from "./errors.js";
+import { authOpenApi, type AuthOpenApi } from "./docs/openapi.js";
+import { resolvePrincipal } from "./principal.js";
 import { createAuthHandler } from "./routes/handler.js";
 import type {
   AuthSession,
@@ -34,6 +42,29 @@ export interface AuthApi {
   getSession(request: Request): Promise<AuthSession | undefined>;
   /** Like `getSession`, but throws `UnauthenticatedError` instead of resolving to `undefined`. */
   requireSession(request: Request): Promise<AuthSession>;
+  /**
+   * Who is behind a request, for `@shuri/api`'s access guards: a client for an `sct_` bearer token,
+   * a user for a session (bearer or cookie), anonymous otherwise. Like `getSession`, may write.
+   */
+  principal(request: Request): Promise<Principal>;
+  /**
+   * The client-credentials clients: create (the secret is returned once), list, get, revoke,
+   * rotate. Programmatic only this round, like `oidcCredentials`: wire it behind the host's own
+   * authenticated admin route.
+   */
+  clients: ClientService;
+  /**
+   * Issues a client token without going through `POST /auth/token` — for a script, a cron or a
+   * test. `scopes` narrows the client's roles; absent, the token carries everything they grant.
+   */
+  issueClientToken(
+    clientId: string,
+    scopes?: readonly string[],
+  ): Promise<IssuedClientToken>;
+  /** Deletes every expired client token row and reports how many. For a host's cron, like `pruneExpiredSessions`. */
+  pruneExpiredClientTokens(): Promise<number>;
+  /** This package's routes and security schemes, for `createOpenApiHandler`'s `paths`/`security`. */
+  openapi: AuthOpenApi;
   /**
    * The `_oidc_credentials` collection: one row per `OidcProviderSlot` declared in `providers`,
    * holding the `clientId`/`clientSecret`/`redirectUri` (and, for `microsoft`, `tenant`) an admin
@@ -61,7 +92,7 @@ export interface AuthApi {
 export interface CreateAuthConfig<
   T extends readonly CollectionSchema[] = CollectionSchema[],
   G extends readonly GlobalSchema[] = GlobalSchema[],
-> extends AuthConfig {
+> extends ResolveAuthOptions {
   /** The app store holding the auth collections. Structurally the same shape `@shuri/api`'s handlers take. */
   store: CollectionResolver<T, G>;
 }
@@ -106,7 +137,10 @@ export function createAuth<
   return {
     handler: createAuthHandler(context),
     getSession,
+    principal: (request) => resolvePrincipal(context, request),
+    openapi: authOpenApi(context),
     oidcCredentials: context.oidcCredentials,
+    clients: context.clients,
 
     async requireSession(request) {
       const session = await getSession(request);
@@ -121,5 +155,13 @@ export function createAuth<
     sessionCookie: (token, expiresAt) => context.cookies.issue(token, expiresAt),
     clearSessionCookie: () => context.cookies.clear(),
     pruneExpiredSessions: () => context.sessions.pruneExpired(),
+
+    async issueClientToken(clientId, scopes) {
+      const client = await context.clients.findByClientId(clientId);
+      if (!client || client.revokedAt !== undefined)
+        throw new UnknownClientError(clientId);
+      return context.clientTokens.issue(client, scopes);
+    },
+    pruneExpiredClientTokens: () => context.clientTokens.pruneExpired(),
   };
 }

@@ -1,7 +1,10 @@
 import { oidcProvider } from "../config.js";
 import type { OidcProviderConfig, ResolvedProvider } from "../types.js";
 
-export interface MicrosoftProviderOptions extends Omit<OidcProviderConfig, "id" | "issuer"> {
+export interface MicrosoftProviderOptions extends Omit<
+  OidcProviderConfig,
+  "id" | "issuer"
+> {
   /** Overridable, so two tenants can be configured side by side. Defaults to "microsoft". */
   id?: string;
   /** The Azure AD tenant: a GUID, a verified domain, or "common"/"organizations"/"consumers". */

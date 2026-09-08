@@ -41,7 +41,13 @@ export async function resolveProviderSlot(
 
   switch (slot.preset) {
     case "google":
-      return googleProvider({ id: slot.id, clientId, clientSecret, redirectUri, ...behavior });
+      return googleProvider({
+        id: slot.id,
+        clientId,
+        clientSecret,
+        redirectUri,
+        ...behavior,
+      });
 
     case "microsoft": {
       const tenant = row["tenant"] as string | undefined;
