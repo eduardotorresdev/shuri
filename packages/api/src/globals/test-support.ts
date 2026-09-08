@@ -27,7 +27,6 @@ export function createFakeGlobalStore(
 
   return {
     schema,
-    subscribe: () => () => {},
     async get() {
       return record;
     },

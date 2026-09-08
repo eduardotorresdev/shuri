@@ -7,7 +7,7 @@ import { secretsSchema } from "./test-support.js";
 describe("publicGlobal", () => {
   it("strips hidden fields from reads and write echoes, keeping them in the store", async () => {
     const store = createFakeGlobalStore(secretsSchema);
-    const api = publicGlobal(store);
+    const api = publicGlobal(store, {});
     await store.update({ name: "Shuri", apiKey: "k" });
 
     expect(await api.get()).toEqual({ name: "Shuri" });
@@ -16,7 +16,7 @@ describe("publicGlobal", () => {
   });
 
   it("refuses a write naming a hidden field", async () => {
-    const api = publicGlobal(createFakeGlobalStore(secretsSchema));
+    const api = publicGlobal(createFakeGlobalStore(secretsSchema), {});
     await expect(api.update({ apiKey: "chosen" })).rejects.toThrow(HiddenFieldError);
   });
 });

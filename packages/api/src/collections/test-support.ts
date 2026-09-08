@@ -3,7 +3,6 @@ import {
   RecordNotFoundError,
   UnknownCollectionError,
   type CollectionStore,
-  type CollectionSubscribe,
   type RecordId,
   type RecordInput,
   type Store,
@@ -19,9 +18,6 @@ export const servicesSchema: CollectionSchema = {
   fields: [{ type: "text", name: "name", required: true }],
 };
 
-// A no-op arrow with no parameters satisfies both of `CollectionSubscribe`'s call signatures.
-const noopSubscribe: CollectionSubscribe<RecordInput> = () => () => {};
-
 /**
  * In-memory `CollectionStore` test double bound to `schema`, which it carries like a real one so the
  * `visibility/` layer can read its `hidden`/`internal` flags off it.
@@ -36,7 +32,6 @@ export function createFakeCollectionStore(
 
   return {
     schema,
-    subscribe: noopSubscribe,
     async findMany() {
       return [...records.values()];
     },

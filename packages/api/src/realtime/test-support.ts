@@ -1,10 +1,11 @@
 import type { CollectionSchema, GlobalSchema } from "@shuri/core";
 import {
-  createEventBus,
+  createHookRegistry,
   UnknownCollectionError,
   UnknownGlobalError,
   type Store,
 } from "@shuri/store";
+import type { StoreEvent } from "./event.js";
 import type { RealtimeApp } from "./handler.js";
 
 /** Test-only fixtures for this package's realtime tests, kept independent of `@shuri/sdk`. */
@@ -25,24 +26,25 @@ export const siteSettingsSchema: GlobalSchema = {
 
 /**
  * Fake `{ store }` declaring the given collections and globals (one "services" collection and one
- * "site" global by default), over a real `createEventBus` — faking a four-line bus would buy
+ * "site" global by default), over a real `createHookRegistry` — faking the registry would buy
  * nothing and would stop the tests from exercising the delivery the handler depends on. Each
- * resolved store carries its `schema`, like a real one, so the visibility layer can read it.
+ * resolved store carries its `schema`, like a real one, so the visibility layer can read it. Tests
+ * produce events with `emit`, which runs the registered hooks the way a real write would.
  * @param [collections] - The collection schemas the fake store resolves.
  * @param [globals] - The global schemas the fake store resolves.
- * @returns A fake realtime app, with its bus exposed for tests to emit on.
+ * @returns A fake realtime app, with its hook registry exposed for tests to emit through.
  */
 export function createFakeRealtimeApp(
   collections: readonly CollectionSchema[] = [servicesSchema],
   globals: readonly GlobalSchema[] = [siteSettingsSchema],
 ): RealtimeApp {
-  const events = createEventBus();
+  const hooks = createHookRegistry();
   const collectionsBySlug = new Map(
     collections.map((schema) => [schema.slug, { schema }]),
   );
   const globalsBySlug = new Map(globals.map((schema) => [schema.slug, { schema }]));
   const store = {
-    events,
+    hooks,
     collection: (slug: string) => {
       const collection = collectionsBySlug.get(slug);
       if (!collection) throw new UnknownCollectionError(slug);
@@ -55,6 +57,47 @@ export function createFakeRealtimeApp(
     },
   } as unknown as Store;
   return { store };
+}
+
+/**
+ * Runs the after hooks a real write of `event` would run, so whatever `subscribeToChanges`
+ * registered on the app's registry sees it exactly as it would see the write.
+ * @param app - The fake app whose registry the hooks are looked up on.
+ * @param event - The event to produce.
+ * @returns Nothing; resolves once every registered hook has run.
+ */
+export async function emit(app: RealtimeApp, event: StoreEvent): Promise<void> {
+  const context = {};
+  if (event.scope === "global") {
+    for (const hook of app.store.hooks.globalHooks(event.global, "afterChange")) {
+      await hook({ global: event.global, context, doc: event.record, previousDoc: {} });
+    }
+    return;
+  }
+  if (event.type === "delete") {
+    for (const hook of app.store.hooks.collectionHooks(event.collection, "afterDelete")) {
+      await hook({ collection: event.collection, context, id: event.id });
+    }
+    return;
+  }
+  for (const hook of app.store.hooks.collectionHooks(event.collection, "afterChange")) {
+    await hook(
+      event.type === "create"
+        ? {
+            collection: event.collection,
+            context,
+            operation: "create",
+            doc: event.record,
+          }
+        : {
+            collection: event.collection,
+            context,
+            operation: "update",
+            doc: event.record,
+            previousDoc: event.record,
+          },
+    );
+  }
 }
 
 /** One SSE message, as read back off a stream. */

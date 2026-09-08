@@ -1,4 +1,4 @@
-import type { StoreEvent } from "@shuri/store";
+import type { StoreEvent } from "./event.js";
 
 /**
  * Formats one event as an SSE message: `type` becomes the `event:` line and the rest of the event

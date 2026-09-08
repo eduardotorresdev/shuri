@@ -1,3 +1,4 @@
+import { AccessRuleError } from "@shuri/core";
 import {
   RecordNotFoundError,
   RecordValidationError,
@@ -47,6 +48,8 @@ export function toErrorResponse(error: unknown): Response {
   if (error instanceof RecordNotFoundError) return errorResponse(404, error.message);
   if (error instanceof RecordValidationError)
     return errorResponse(400, error.message, { issues: error.issues });
+  // A misdeclared access rule is the host's bug, not the caller's: a 500 that names the rule.
+  if (error instanceof AccessRuleError) return errorResponse(500, error.message);
   throw error;
 }
 

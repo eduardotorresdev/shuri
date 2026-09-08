@@ -1,4 +1,4 @@
-import type { StoreEvent } from "@shuri/store";
+import type { StoreEvent } from "./event.js";
 import { describe, expect, it } from "vitest";
 import { matchesSelection } from "./filter.js";
 

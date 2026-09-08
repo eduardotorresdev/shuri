@@ -1,5 +1,7 @@
-import type { CollectionSchema, GlobalSchema } from "@shuri/core";
+import type { CollectionSchema, GlobalSchema, OperationContext } from "@shuri/core";
 import type { GlobalStore, RecordInput, Store } from "@shuri/store";
+import { guardedGlobal } from "../access/guarded-global.js";
+import { resolveAccessContext, type AccessOptions } from "../access/principal.js";
 import { publicGlobal } from "../visibility/public-global.js";
 import { MethodNotAllowedError } from "../errors.js";
 import { readJsonBody } from "../utils/request.js";
@@ -18,6 +20,8 @@ export interface GlobalsApiApp<G extends readonly GlobalSchema[] = GlobalSchema[
 export interface CreateGlobalsApiHandlerOptions {
   /** Path prefix global routes are mounted under. Defaults to "/globals". */
   basePath?: string;
+  /** Turns the per-global `access` rules on. Absent, every route stays open. See `access/`. */
+  access?: AccessOptions;
 }
 
 /**
@@ -28,7 +32,8 @@ export interface CreateGlobalsApiHandlerOptions {
  *   PATCH {basePath}/:slug   update it (merge)
  *
  * A field declared `hidden` never appears in a response and can't be written (see
- * `visibility/public-global.ts`).
+ * `visibility/public-global.ts`). With `options.access`, `read`/`update` are authorized against the
+ * global's `access` rules first (see `access/guarded-global.ts`).
  *
  * Returns `undefined` for anything outside `basePath`, so it composes with `createApiHandler` and
  * `createOpenApiHandler` by falling through (see `@shuri/sdk`'s `create()`).
@@ -48,9 +53,16 @@ export function createGlobalsApiHandler<G extends readonly GlobalSchema[]>(
     if (!route) return undefined;
 
     try {
-      const global = publicGlobal(
-        app.store.global(route.slug as never) as GlobalStore<RecordInput>,
-      );
+      const store = app.store.global(route.slug as never) as GlobalStore<RecordInput>;
+      const access = options.access
+        ? await resolveAccessContext(options.access, request)
+        : undefined;
+      const context: OperationContext = access
+        ? { request, principal: access.principal }
+        : { request };
+      const global = access
+        ? guardedGlobal(publicGlobal(store, context), store.schema, access)
+        : publicGlobal(store, context);
 
       switch (request.method) {
         case "GET":

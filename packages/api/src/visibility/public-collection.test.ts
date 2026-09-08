@@ -6,7 +6,7 @@ import { accountsSchema } from "./test-support.js";
 
 function setup() {
   const store = createFakeCollectionStore(accountsSchema);
-  return { store, api: publicCollection(store) };
+  return { store, api: publicCollection(store, {}) };
 }
 
 describe("publicCollection", () => {

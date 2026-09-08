@@ -1,5 +1,7 @@
-import type { CollectionSchema } from "@shuri/core";
+import type { CollectionSchema, OperationContext } from "@shuri/core";
 import type { Store } from "@shuri/store";
+import { guardedCollection } from "../access/guarded-collection.js";
+import { resolveAccessContext, type AccessOptions } from "../access/principal.js";
 import { MethodNotAllowedError } from "../errors.js";
 import { readJsonBody } from "../utils/request.js";
 import { jsonResponse, noContentResponse, toErrorResponse } from "../utils/response.js";
@@ -25,6 +27,8 @@ export interface ApiApp<T extends readonly CollectionSchema[] = CollectionSchema
 export interface CreateApiHandlerOptions {
   /** Path prefix collection routes are mounted under. Defaults to "/collections". */
   basePath?: string;
+  /** Turns the per-collection `access` rules on. Absent, every route stays open. See `access/`. */
+  access?: AccessOptions;
 }
 
 /**
@@ -43,6 +47,8 @@ export interface CreateApiHandlerOptions {
  * A collection declared `internal` isn't served at all: the request 404s exactly as it would for a
  * slug no collection declares (see `visibility/internal.ts`), and a field declared `hidden` never
  * appears in a response and can't be written or queried (see `visibility/public-collection.ts`).
+ * With `options.access`, the principal is resolved once per request and every operation is
+ * authorized against the collection's `access` rules first (see `access/guarded-collection.ts`).
  *
  * Record validation happens in `@shuri/store`'s `insert`/`update`, which already guard every write
  * against the collection's declared fields (so does `@shuri/sdk`, since both go through the same
@@ -66,7 +72,18 @@ export function createApiHandler<T extends readonly CollectionSchema[]>(
 
       // `servableCollection` is what applies `internal`, and `publicCollection` what applies
       // `hidden`: from here down, no unredacted view of the collection exists to forget about.
-      const collection = publicCollection(servableCollection(app.store, route.slug));
+      // `guardedCollection` goes around both, so authorization is decided before either answers.
+      const store = servableCollection(app.store, route.slug);
+      const access = options.access
+        ? await resolveAccessContext(options.access, request)
+        : undefined;
+      // What the collection's hooks see: the request, and the principal once access resolved it.
+      const context: OperationContext = access
+        ? { request, principal: access.principal }
+        : { request };
+      const collection = access
+        ? guardedCollection(publicCollection(store, context), store.schema, access)
+        : publicCollection(store, context);
       return await (route.id
         ? handleRecord(request, collection, route.id)
         : handleCollection(request, collection, url));

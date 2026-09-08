@@ -13,6 +13,7 @@ import {
   createRealtimeHandler,
   type CreateRealtimeHandlerOptions,
 } from "./realtime/handler.js";
+import type { AccessOptions } from "./access/principal.js";
 import type { FallingHandler } from "./falling.js";
 
 /** Everything the composed handler serves from: the declared schema and the store backing it. */
@@ -39,6 +40,12 @@ export interface CreateHandlerOptions {
   realtime?: CreateRealtimeHandlerOptions;
   /** Options for the OpenAPI document and docs page. See `createOpenApiHandler`. */
   openapi?: CreateOpenApiHandlerOptions;
+  /**
+   * Turns access control on for the collections, globals and event stream handlers alike, with one
+   * principal resolver. Absent, no guard runs anywhere: an app without auth is exactly as open as
+   * it always was.
+   */
+  access?: AccessOptions;
 }
 
 /**
@@ -74,10 +81,10 @@ export function createHandler<
       realtimeBasePath: options.realtime?.basePath,
       ...options.openapi,
     }),
-    createRealtimeHandler(app, options.realtime),
-    createGlobalsApiHandler(app, options.globalsApi),
+    createRealtimeHandler(app, { access: options.access, ...options.realtime }),
+    createGlobalsApiHandler(app, { access: options.access, ...options.globalsApi }),
   ];
-  const terminal = createApiHandler(app, options.api);
+  const terminal = createApiHandler(app, { access: options.access, ...options.api });
 
   return async function handleRequest(request: Request): Promise<Response> {
     for (const handler of falling) {

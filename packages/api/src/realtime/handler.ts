@@ -1,24 +1,27 @@
 import type { CollectionSchema, GlobalSchema } from "@shuri/core";
 import type { Store } from "@shuri/store";
+import { createEventGate, type EventGate } from "../access/event-gate.js";
+import { resolveAccessContext, type AccessOptions } from "../access/principal.js";
 import { MethodNotAllowedError } from "../errors.js";
 import { eventStreamResponse, toErrorResponse } from "../utils/response.js";
 import { matchesSelection } from "./filter.js";
 import { toEventFrame } from "./frame.js";
 import { parseEventQuery, type EventSelection } from "./query.js";
+import { subscribeToChanges } from "./source.js";
 import { servableCollection } from "../visibility/internal.js";
 import { publicEvent } from "../visibility/public-event.js";
 import { matchRealtimeRoute } from "./routes.js";
 
 /**
- * Minimal shape `createRealtimeHandler` needs: the bus to stream from, plus the slug resolvers used
- * to reject a selection naming a collection/global that doesn't exist. `ShuriApp`'s own store
+ * Minimal shape `createRealtimeHandler` needs: the hook registry the stream is fed from, plus the
+ * slug resolvers used to reject a selection naming a collection/global that doesn't exist. `ShuriApp`'s own store
  * satisfies this structurally.
  */
 export interface RealtimeApp<
   T extends readonly CollectionSchema[] = CollectionSchema[],
   G extends readonly GlobalSchema[] = GlobalSchema[],
 > {
-  store: Pick<Store<T, G>, "collection" | "global" | "events">;
+  store: Pick<Store<T, G>, "collection" | "global" | "hooks">;
 }
 
 export interface CreateRealtimeHandlerOptions {
@@ -26,6 +29,8 @@ export interface CreateRealtimeHandlerOptions {
   basePath?: string;
   /** Milliseconds between keep-alive comments on an idle stream. `0` disables them. Defaults to 15000. */
   heartbeatMs?: number;
+  /** Turns the `access` rules on: `list` (collections) / `read` (globals) gate each event. See `access/`. */
+  access?: AccessOptions;
 }
 
 /**
@@ -48,8 +53,9 @@ function assertKnownSlugs<
 }
 
 /**
- * Builds a web-standard `fetch` handler serving every event of `app.store` as one Server-Sent
- * Events stream at `basePath`:
+ * Builds a web-standard `fetch` handler serving every write to `app.store` — observed through its
+ * `afterChange`/`afterDelete` hooks, see `source.ts` — as one Server-Sent Events stream at
+ * `basePath`:
  *
  *   GET {basePath}?collection=posts&global=site&id=abc&events=create,update
  *
@@ -58,7 +64,9 @@ function assertKnownSlugs<
  * happen server-side, over a single connection. No params streams everything.
  *
  * Events of a collection declared `internal` never reach the stream, and a field declared `hidden`
- * is stripped from every frame (see `visibility/public-event.ts`).
+ * is stripped from every frame (see `visibility/public-event.ts`). With `options.access`, an
+ * explicit selection the principal may not read is refused up front, and every event is gated by
+ * the `list`/`read` rule of its slug (see `access/event-gate.ts`).
  *
  * Returns `undefined` for anything outside `basePath`, so it composes with the other handlers by
  * falling through (see `@shuri/sdk`'s `create()`), same as `globals/handler.ts` and `docs/handler.ts`.
@@ -85,20 +93,71 @@ export function createRealtimeHandler<
       const selection = parseEventQuery(url.searchParams);
       assertKnownSlugs(app.store, selection);
 
-      // `StoreEventBus.subscribe` already returns the unsubscribe function, which is exactly the
-      // teardown `eventStreamResponse` expects: a disconnect unsubscribes, with no glue in between.
-      return eventStreamResponse(
-        (send) =>
-          app.store.events.subscribe((rawEvent) => {
-            // `publicEvent` first, and it returns one thing: an event of an `internal` collection is
-            // dropped and a `hidden` field stripped in a single step there's no way to half-apply.
-            const event = publicEvent(app.store, rawEvent);
-            if (event && matchesSelection(event, selection)) send(toEventFrame(event));
-          }),
-        { signal: request.signal, heartbeatMs: options.heartbeatMs },
-      );
+      let gate: EventGate | undefined;
+      if (options.access) {
+        gate = createEventGate(
+          app.store,
+          await resolveAccessContext(options.access, request),
+        );
+        await gate.assertSelectable(selection);
+      }
+
+      // `subscribeToChanges` returns the unsubscribe function, which is exactly the teardown
+      // `eventStreamResponse` expects: a disconnect unregisters the hooks, with no glue in between.
+      return eventStreamResponse((send) => subscribe(app.store, selection, gate, send), {
+        signal: request.signal,
+        heartbeatMs: options.heartbeatMs,
+      });
     } catch (error) {
       return toErrorResponse(error);
     }
   };
+}
+
+/**
+ * Subscribes one connection to the store's writes. Without a gate, each event is sent synchronously.
+ * With one, admission is async (a rule may await the store) while delivery is synchronous, so
+ * decisions are chained on a promise: order is preserved, and a rule that throws drops that one
+ * event and resurfaces the error out of band — the same fail-closed stance `source.ts` takes for a
+ * listener.
+ * @param store - The store whose hooks feed the connection.
+ * @param selection - The client's selection.
+ * @param gate - The connection's access gate, when access control is on.
+ * @param send - Writes one frame to the stream.
+ * @returns The unsubscribe function.
+ */
+function subscribe<
+  T extends readonly CollectionSchema[],
+  G extends readonly GlobalSchema[],
+>(
+  store: RealtimeApp<T, G>["store"],
+  selection: EventSelection,
+  gate: EventGate | undefined,
+  send: (frame: string) => void,
+): () => void {
+  let chain: Promise<void> = Promise.resolve();
+
+  return subscribeToChanges(store.hooks, (rawEvent) => {
+    // `publicEvent` first, and it returns one thing: an event of an `internal` collection is
+    // dropped and a `hidden` field stripped in a single step there's no way to half-apply.
+    const event = publicEvent(store, rawEvent);
+    if (!event || !matchesSelection(event, selection)) return;
+    if (!gate) {
+      send(toEventFrame(event));
+      return;
+    }
+
+    chain = chain
+      .then(() => gate.admits(event))
+      .then(
+        (admitted) => {
+          if (admitted) send(toEventFrame(event));
+        },
+        (error: unknown) => {
+          queueMicrotask(() => {
+            throw error;
+          });
+        },
+      );
+  });
 }

@@ -1,4 +1,4 @@
-import type { StoreEvent } from "@shuri/store";
+import type { StoreEvent } from "./event.js";
 import type { EventSelection } from "./query.js";
 
 /**

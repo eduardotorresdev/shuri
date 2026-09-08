@@ -1,18 +1,35 @@
 import type { CollectionSchema } from "@shuri/core";
+import {
+  GUARDED_RESPONSES,
+  guardedOperation,
+  type OpenApiSecurity,
+} from "../security.js";
 import { schemaRef } from "./ref.js";
 
+/**
+ * The path items of one collection's REST routes.
+ * @param collection - The collection to describe.
+ * @param basePath - The path prefix its routes are mounted under.
+ * @param [security] - The document's security, when access control is on.
+ * @returns The path items, keyed by path.
+ */
 export function collectionPaths(
   collection: CollectionSchema,
   basePath: string,
+  security?: OpenApiSecurity,
 ): Record<string, Record<string, unknown>> {
   const ref = schemaRef(collection.slug);
   const tags = [collection.title];
+  const guarded = (op: Parameters<typeof guardedOperation>[2]) =>
+    guardedOperation(security, collection.slug, op);
+  const errors = security ? GUARDED_RESPONSES : {};
 
   return {
     [`${basePath}/${collection.slug}`]: {
       get: {
         tags,
         summary: `List ${collection.plural}`,
+        ...guarded("list"),
         parameters: [
           {
             name: "limit",
@@ -44,11 +61,13 @@ export function collectionPaths(
               "application/json": { schema: { type: "array", items: ref } },
             },
           },
+          ...errors,
         },
       },
       post: {
         tags,
         summary: `Create a ${collection.singular}`,
+        ...guarded("create"),
         requestBody: {
           required: true,
           content: { "application/json": { schema: ref } },
@@ -59,6 +78,7 @@ export function collectionPaths(
             content: { "application/json": { schema: ref } },
           },
           "400": { description: "Validation error" },
+          ...errors,
         },
       },
     },
@@ -66,6 +86,7 @@ export function collectionPaths(
       get: {
         tags,
         summary: `Get a ${collection.singular}`,
+        ...guarded("view"),
         parameters: [
           {
             name: "id",
@@ -80,11 +101,13 @@ export function collectionPaths(
             content: { "application/json": { schema: ref } },
           },
           "404": { description: "Not found" },
+          ...errors,
         },
       },
       patch: {
         tags,
         summary: `Update a ${collection.singular}`,
+        ...guarded("update"),
         parameters: [
           {
             name: "id",
@@ -104,11 +127,13 @@ export function collectionPaths(
           },
           "400": { description: "Validation error" },
           "404": { description: "Not found" },
+          ...errors,
         },
       },
       delete: {
         tags,
         summary: `Delete a ${collection.singular}`,
+        ...guarded("delete"),
         parameters: [
           {
             name: "id",
@@ -120,6 +145,7 @@ export function collectionPaths(
         responses: {
           "204": { description: "No content" },
           "404": { description: "Not found" },
+          ...errors,
         },
       },
     },

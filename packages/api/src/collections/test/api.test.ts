@@ -1,4 +1,4 @@
-import { createCore, type CollectionSchema } from "@shuri/core";
+import { createCore, type CollectionSchema, type OperationContext } from "@shuri/core";
 import { createStore, type Store } from "@shuri/store";
 import { createMemoryAdapter } from "@shuri/store-memory";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -210,5 +210,64 @@ describe("api handler over a real Store", () => {
       }),
     );
     expect(response.status).toBe(201);
+  });
+});
+
+describe("hooks over HTTP", () => {
+  const contexts: OperationContext[] = [];
+  const audited: CollectionSchema = {
+    ...collections[0],
+    slug: "audited",
+    hooks: {
+      beforeChange: [
+        ({ context, data }) => {
+          contexts.push(context);
+          return { ...data, name: `${String(data.name)}!` };
+        },
+      ],
+    },
+  };
+
+  beforeEach(() => {
+    contexts.length = 0;
+  });
+
+  it("hands a schema hook the request, and the write as the hook left it comes back", async () => {
+    const auditedStore = createStore(
+      createCore({ collections: [audited] }),
+      createMemoryAdapter(),
+    );
+    const request = new Request("http://localhost/collections/audited", {
+      method: "POST",
+      body: JSON.stringify({ name: "Haircut" }),
+    });
+
+    const response = await createApiHandler({ store: auditedStore })(request);
+
+    expect(response.status).toBe(201);
+    expect(await response.json()).toMatchObject({ name: "Haircut!" });
+    expect(contexts).toEqual([{ request }]);
+  });
+
+  it("adds the resolved principal to the context once access is on", async () => {
+    const auditedStore = createStore(
+      createCore({ collections: [audited] }),
+      createMemoryAdapter(),
+    );
+    const principal = { kind: "user" as const, user: { id: "ada" } };
+    const guarded = createApiHandler(
+      { store: auditedStore },
+      { access: { principal: async () => principal } },
+    );
+
+    const response = await guarded(
+      new Request("http://localhost/collections/audited", {
+        method: "POST",
+        body: JSON.stringify({ name: "Haircut" }),
+      }),
+    );
+
+    expect(response.status).toBe(201);
+    expect(contexts).toEqual([{ request: expect.any(Request), principal }]);
   });
 });

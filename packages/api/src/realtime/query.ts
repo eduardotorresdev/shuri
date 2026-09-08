@@ -1,4 +1,4 @@
-import { STORE_EVENT_TYPES, type StoreEventType } from "@shuri/store";
+import { STORE_EVENT_TYPES, type StoreEventType } from "./event.js";
 import {
   arrayOf,
   object,

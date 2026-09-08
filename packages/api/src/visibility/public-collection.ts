@@ -1,4 +1,4 @@
-import { redactRecord, redactRecords } from "@shuri/core";
+import { redactRecord, redactRecords, type OperationContext } from "@shuri/core";
 import type {
   CollectionStore,
   Query,
@@ -24,31 +24,34 @@ export interface PublicCollection {
 
 /**
  * Wraps a `CollectionStore` in the HTTP-facing view of it: reads come back without the fields
- * declared `hidden`, and writes or queries naming one are refused with a `HiddenFieldError`.
+ * declared `hidden`, and writes or queries naming one are refused with a `HiddenFieldError`. Every
+ * store call is made with `context`, so the collection's hooks see the request behind it.
  * @param collection - The full collection store to narrow.
+ * @param context - The request's operation context, forwarded to every store call.
  * @returns The public view of `collection`.
  */
 export function publicCollection(
   collection: CollectionStore<RecordInput>,
+  context: OperationContext,
 ): PublicCollection {
   const { schema } = collection;
 
   return {
     async findMany(query) {
       if (query) assertQueryableFields(schema, query);
-      return redactRecords(schema, await collection.findMany(query));
+      return redactRecords(schema, await collection.findMany(query, context));
     },
     async get(id) {
-      return redactRecord(schema, await collection.get(id));
+      return redactRecord(schema, await collection.get(id, context));
     },
     async insert(data) {
       assertWritableRecord(schema, data);
-      return redactRecord(schema, await collection.insert(data));
+      return redactRecord(schema, await collection.insert(data, context));
     },
     async update(id, data) {
       assertWritableRecord(schema, data);
-      return redactRecord(schema, await collection.update(id, data));
+      return redactRecord(schema, await collection.update(id, data, context));
     },
-    delete: (id) => collection.delete(id),
+    delete: (id) => collection.delete(id, context),
   };
 }

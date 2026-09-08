@@ -29,6 +29,15 @@ const filterOpValidator: Validator<unknown> = (value, ctx) => {
   }
 };
 
+// A field takes one filter or a list of them (ANDed), the same two shapes `Where` declares.
+const fieldFiltersValidator: Validator<unknown> = (value, ctx) => {
+  if (Array.isArray(value)) {
+    arrayOf(filterOpValidator)(value, ctx);
+    return;
+  }
+  filterOpValidator(value, ctx);
+};
+
 const orderByEntryValidator: Validator<unknown> = (value, ctx) => {
   if (typeof value !== "object" || value === null) {
     ctx.addIssue('must be an object with "field"');
@@ -62,7 +71,7 @@ const queryValidator: Validator<RawQuery> = object<RawQuery>({
   limit: optional(nonNegativeInteger("limit")),
   offset: optional(nonNegativeInteger("offset")),
   where: optional(
-    record(filterOpValidator, '"where" must be an object of field filters'),
+    record(fieldFiltersValidator, '"where" must be an object of field filters'),
   ),
   orderBy: optional(
     arrayOf(orderByEntryValidator, '"orderBy" must be an array of order entries'),

@@ -44,6 +44,34 @@ describe("parseQuery", () => {
     expect(() => parseQuery(inParams)).not.toThrow();
   });
 
+  it("accepts a list of filters on one field, and validates each", () => {
+    const ok = new URLSearchParams({
+      where: JSON.stringify({
+        price: [
+          { op: "gt", value: 1 },
+          { op: "lt", value: 9 },
+        ],
+      }),
+    });
+    expect(parseQuery(ok)).toEqual({
+      where: {
+        price: [
+          { op: "gt", value: 1 },
+          { op: "lt", value: 9 },
+        ],
+      },
+    });
+    const bad = new URLSearchParams({
+      where: JSON.stringify({
+        price: [
+          { op: "gt", value: 1 },
+          { op: "nope", value: 9 },
+        ],
+      }),
+    });
+    expect(() => parseQuery(bad)).toThrow(InvalidQueryError);
+  });
+
   it("rejects where that isn't an object of filters", () => {
     expect(() => parseQuery(new URLSearchParams({ where: "[]" }))).toThrow(
       InvalidQueryError,

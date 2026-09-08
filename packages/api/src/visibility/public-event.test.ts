@@ -1,4 +1,4 @@
-import type { StoreEvent } from "@shuri/store";
+import type { StoreEvent } from "../realtime/event.js";
 import { describe, expect, it } from "vitest";
 import { createFakeRealtimeApp } from "../realtime/test-support.js";
 import { publicEvent } from "./public-event.js";

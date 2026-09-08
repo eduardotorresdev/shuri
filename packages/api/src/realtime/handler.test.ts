@@ -1,7 +1,7 @@
-import type { StoreEvent } from "@shuri/store";
+import type { StoreEvent } from "./event.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createRealtimeHandler, type RealtimeApp } from "./handler.js";
-import { createFakeRealtimeApp, readEvents } from "./test-support.js";
+import { createFakeRealtimeApp, emit, readEvents } from "./test-support.js";
 
 const created: StoreEvent = {
   scope: "collection",
@@ -71,8 +71,8 @@ describe("createRealtimeHandler", () => {
     expect(response?.headers.get("content-type")).toBe("text/event-stream");
 
     const frames = readEvents(response as Response, 2);
-    app.store.events.emit(created);
-    app.store.events.emit(siteUpdated);
+    await emit(app, created);
+    await emit(app, siteUpdated);
 
     expect(await frames).toEqual([
       {
@@ -87,8 +87,8 @@ describe("createRealtimeHandler", () => {
     const response = await handler(streamRequest("?global=site"));
 
     const frames = readEvents(response as Response, 1);
-    app.store.events.emit(created);
-    app.store.events.emit(siteUpdated);
+    await emit(app, created);
+    await emit(app, siteUpdated);
 
     expect(await frames).toEqual([
       { event: "update", data: { global: "site", record: { name: "Acme" } } },
@@ -98,10 +98,10 @@ describe("createRealtimeHandler", () => {
   it("closes the stream and unsubscribes when the request is aborted", async () => {
     const response = await handler(streamRequest());
     const frames = readEvents(response as Response, 2);
-    app.store.events.emit(created);
+    await emit(app, created);
 
     controller.abort();
-    app.store.events.emit(siteUpdated);
+    await emit(app, siteUpdated);
 
     // Only the event emitted before the abort made it through, and the read ended on close.
     expect(await frames).toEqual([

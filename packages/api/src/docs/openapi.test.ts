@@ -163,3 +163,36 @@ describe("buildOpenApiDocument with the event stream", () => {
     expect(document.paths["/events"]).toBeUndefined();
   });
 });
+
+describe("buildOpenApiDocument with security and extra paths", () => {
+  const security = {
+    schemes: { bearerAuth: { type: "http", scheme: "bearer" } },
+    requirements: (scope?: string) => [{ bearerAuth: scope ? [scope] : [] }],
+  };
+  const document = buildOpenApiDocument([servicesSchema], [], {
+    security,
+    paths: { "/auth/me": { get: { summary: "Me" } } },
+  });
+
+  it("publishes the schemes and the per-operation scope", () => {
+    expect(document.components.securitySchemes).toEqual(security.schemes);
+    expect(document.paths["/collections/services"]["get"]).toMatchObject({
+      security: [{ bearerAuth: ["services:list"] }],
+      responses: { "401": expect.anything(), "403": expect.anything() },
+    });
+    expect(document.paths["/collections/services/{id}"]["delete"]).toMatchObject({
+      security: [{ bearerAuth: ["services:delete"] }],
+    });
+    expect(document.paths["/events"]["get"]).toMatchObject({
+      security: [{ bearerAuth: [] }],
+    });
+  });
+
+  it("merges the extra paths, and describes an open API when nothing is given", () => {
+    expect(document.paths["/auth/me"]).toEqual({ get: { summary: "Me" } });
+    const open = buildOpenApiDocument([servicesSchema]);
+    expect(open.components.securitySchemes).toBeUndefined();
+    expect(document.paths["/collections/services"]["get"]).toHaveProperty("security");
+    expect(open.paths["/collections/services"]["get"]).not.toHaveProperty("security");
+  });
+});

@@ -1,10 +1,6 @@
 import { redactRecord, type CollectionSchema, type GlobalSchema } from "@shuri/core";
-import {
-  UnknownCollectionError,
-  UnknownGlobalError,
-  type Store,
-  type StoreEvent,
-} from "@shuri/store";
+import { UnknownCollectionError, UnknownGlobalError, type Store } from "@shuri/store";
+import type { StoreEvent } from "../realtime/event.js";
 
 /**
  * The HTTP-facing view of one store event: `undefined` when it must not be streamed at all (an
@@ -15,7 +11,7 @@ import {
  * this" mapper: a two-part contract can be applied half-way, and half-applied here means streaming
  * a password hash to every connected client.
  * @param store - The store resolving each slug's schema.
- * @param event - The event as published on the bus.
+ * @param event - The event as built from the store's hooks.
  * @returns The event to stream, or `undefined` when it must not be streamed.
  */
 export function publicEvent<
@@ -37,7 +33,7 @@ export function publicEvent<
     return { ...event, record: redactRecord(schema, event.record) };
   } catch (error) {
     // A slug the store can't resolve can't be checked for visibility either, so it isn't streamed.
-    // Nothing on the bus should reach here today; failing closed keeps it that way if something does.
+    // Nothing the hooks produce should reach here today; failing closed keeps it that way if something does.
     if (error instanceof UnknownCollectionError || error instanceof UnknownGlobalError)
       return undefined;
     throw error;

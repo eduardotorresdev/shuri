@@ -1,7 +1,8 @@
 # @shuri/api
 
 Web-standard (`Request`/`Response`) HTTP handlers that expose collections and globals as REST, their
-change events as one Server-Sent Events stream, plus the OpenAPI document and docs page. Framework-agnostic: runs directly on Deno/Bun or behind a thin
+writes as one Server-Sent Events stream (fed by the store's `afterChange`/`afterDelete` hooks), plus
+the OpenAPI document and docs page. Framework-agnostic: runs directly on Deno/Bun or behind a thin
 adapter (Node, Hono, ...). Depends solely on `@shuri/store` and `@shuri/validate`, keeping
 `@shuri/core`/`@shuri/sdk` out of the picture so it stays decoupled from schema authoring.
 
@@ -28,14 +29,24 @@ src/
     routes.ts                    matchGlobalRoute: pathname -> {slug}
     test-support.ts
   realtime/
-    handler.ts                   createRealtimeHandler: one SSE stream for every store event
+    handler.ts                   createRealtimeHandler: one SSE stream for every store write
+    event.ts                     StoreEvent union (scope + type), STORE_EVENT_TYPES: the wire vocabulary
+    source.ts                    subscribeToChanges: wildcard afterChange/afterDelete hooks -> StoreEvent
     routes.ts                    matchRealtimeRoute: pathname -> is this the stream?
     query.ts                     parseEventQuery: reads/validates collection/global/id/events
     filter.ts                    matchesSelection: does this event belong in this client's stream?
     frame.ts                     toEventFrame: event -> SSE message
     errors.ts                    InvalidEventQueryError
-    test-support.ts              fake app over a real bus, readEvents
+    test-support.ts              fake app over a real hook registry, emit, readEvents
     test/events.test.ts          integration test
+  access/
+    errors.ts                    UnauthenticatedError (401), ForbiddenError (403)
+    principal.ts                 PrincipalResolver/AccessOptions, ANONYMOUS, deny, resolveAccessContext
+    guarded-collection.ts        guardedCollection: PublicCollection -> authorized PublicCollection
+    guarded-global.ts            guardedGlobal: PublicGlobal -> authorized PublicGlobal
+    event-gate.ts                createEventGate: which events one connection may receive
+    *.test.ts                    unit tests next to each
+    test/access.test.ts          integration test: the policy end to end through createHandler
   visibility/
     guards.ts                    assertWritableRecord/assertQueryableFields, over @shuri/core's redact.ts
     errors.ts                    HiddenFieldError (400)
@@ -47,6 +58,7 @@ src/
     test/visibility.test.ts      integration test
   docs/
     openapi.ts                   buildOpenApiDocument: assembles the full OpenAPI 3.1 document
+    security.ts                  OpenApiSecurity, guardedOperation: security + 401/403 per operation
     json-schema.ts               fieldSchema/collectionSchema/globalSchema (Field -> JSON Schema)
     paths/
       collections.ts              collectionPaths (list/create, get/update/delete)
@@ -67,7 +79,11 @@ src/
 - **collections/handler.ts** — `createApiHandler` mounts `GET/POST {basePath}/:slug` and
   `GET/PATCH/DELETE {basePath}/:slug/:id` on top of a `Store`. Record validation already happens
   inside `CollectionStore.insert`/`update` (`@shuri/store`); this layer's job is only to translate
-  thrown errors into HTTP responses via `toErrorResponse`.
+  thrown errors into HTTP responses via `toErrorResponse`. It builds one `OperationContext` per
+  request — `{ request }`, plus the `principal` once access resolved it — and hands it to
+  `publicCollection`, which forwards it to every store call: that is how a collection's hooks learn
+  who did what over HTTP. A hook that throws is the host's error, not the caller's: `toErrorResponse`
+  doesn't recognize it and rethrows, so it surfaces as a 500 at the host's boundary.
 - **collections/query.ts** — turns URL search params into the `@shuri/store` `Query` AST, validated
   through `@shuri/validate` combinators, the same way `@shuri/core` validates schema.
 - **globals/handler.ts** — `createGlobalsApiHandler` mounts `GET/PATCH {basePath}/:slug`; returns
@@ -79,6 +95,18 @@ src/
   those at around six). No params streams everything; a selection naming an undeclared slug is a 404
   rather than a stream that stays silently empty. Returns `undefined` outside `basePath`, falling
   through like `globals/handler.ts` and `docs/handler.ts`.
+- **realtime/source.ts** — where the stream's events come from, now that `@shuri/store` has no event
+  bus: `subscribeToChanges(store.hooks, listener)` registers wildcard `afterChange`/`afterDelete`
+  hooks (collections) and `afterChange` (globals) and maps their args to a `StoreEvent` — the way
+  PocketBase's realtime is built on its record hooks. Registered on `"*"`, they run after each slug's
+  own hooks, so a frame carries the write as every schema-declared hook left it. A throwing
+  `listener` is caught and rethrown in a microtask: a stream must never fail the write that produced
+  its event, and an _after_ hook that throws would otherwise propagate to the writer. The returned
+  unsubscribe is exactly the teardown `eventStreamResponse` expects.
+- **realtime/event.ts** — the `StoreEvent` union (`scope` for dispatch, `type` for the `event:`
+  line) and `STORE_EVENT_TYPES`, moved here from the store because they are this route's wire
+  vocabulary and nothing else uses them. A `delete` carries only the id: no pre-image reaches a
+  connection whose rule can no longer be checked against a row that is gone.
 - **utils/response.ts#eventStreamResponse** — opens the stream, subscribing synchronously inside the
   `ReadableStream` constructor (so no event can slip through before the subscription is live), runs
   the teardown exactly once on either close path (the request's `signal` **and** the stream's
@@ -89,9 +117,15 @@ src/
   one file each under `docs/paths/`, plus a `components.schemas` entry derived from each schema's
   fields). A collection's `id` is `readOnly`, since the store generates it and rejects a payload
   carrying one. The event union stays out of `components.schemas` on purpose: its keys are raw user
-  slugs, so any added name could collide with one.
+  slugs, so any added name could collide with one. Two options let another package complete the
+  document: `paths` (extra path items, merged last — `@shuri/auth`'s routes) and `security` (the
+  `components.securitySchemes` plus a `requirements(scope)` every operation is stamped with, carrying
+  its own `<slug>:<op>` scope; the event stream gets one without a scope, since it is gated per
+  event). Both absent, the document describes an open API, exactly as before.
 - **visibility/** — a folder rather than scattered calls, so that `ls src/visibility` answers, in
-  full, "where is `hidden` applied, and did we miss a path?". `@shuri/core` declares `hidden` (a
+  full, "where is `hidden` applied, and did we miss a path?". `publicCollection`/`publicGlobal` also
+  take the request's `OperationContext` and forward it to every store call, so hooks run over HTTP
+  see the same context whichever route they came through. `@shuri/core` declares `hidden` (a
   field) and `internal` (a collection), validates them, and defines what they mean
   (`hiddenFieldNames`/`redactRecord`/`redactRecords`/`servableCollections`, in its own `redact.ts`);
   this folder is where they are _enforced_, importing those functions rather than redefining them —
@@ -116,6 +150,38 @@ src/
     `contains` filter reads a redacted value back one guess at a time. The cost is that "what may be
     written" is now expressed in two layers (core validates the shape, this decides the visibility),
     mitigated by both deriving from the one flag.
+- **access/** — the twin of `visibility/`, for the third surface flag: `@shuri/core` declares
+  `access` and defines the policy (`access/policy.ts`); this folder is where it is _enforced_, so
+  that `ls src/access` answers "where is authorization applied, and did we miss a path?". It only
+  runs when a handler gets `access: { principal }` — `createHandler` forwards one `AccessOptions` to
+  the collections, globals and realtime handlers alike, and `@shuri/sdk` sets it exactly when the
+  host turned auth on. **Without it nothing changes**: an app without auth is as open as before.
+  - The principal is resolved **once per request** (`resolveAccessContext`), never per operation,
+    since resolving may hit the store.
+  - `guardedCollection` wraps **outside** `publicCollection`, so 401/403 is decided before the 400
+    a `hidden` field would earn — an anonymous probe can't learn hidden field names. The cost: a
+    rule's `Where` can't name a `hidden` field (the query is refused on list, and the redacted record
+    never matches on get). Both fail closed.
+  - A `Where` is ANDed into the client's `where` on list (`mergeWhere`, so pagination counts only
+    visible rows) and checked against the record on get/update/delete. A row the rule excludes
+    answers the **same** `RecordNotFoundError` an unknown id does, so existence never leaks; for
+    `update` it's the **pre-image** that is checked, like Payload — the rule rules on what the row
+    is, not on what the caller would like it to become.
+  - `deny` answers **401 to anonymous and 403 to anyone identified**: the first may sign in and
+    retry, the second may not.
+  - `createEventGate` evaluates `list`/`read` **once per slug per connection** and caches it (a
+    stream carries thousands of events, a rule may hit the store), checks a `Where` per event
+    against the redacted record, and **drops a `delete` under a `Where`** — it carries no pre-image,
+    and guessing would leak that the row existed. An explicit selection (`?collection=x`) the
+    principal may not read is refused when the stream is opened, in the same status the REST route
+    would give; a silent stream is the hardest failure to debug. Delivery from the hooks is
+    synchronous and a rule is async, so admissions are chained on a promise: order is kept, and a
+    throwing rule drops that one event and resurfaces out of band, like `source.ts` does for a
+    listener.
+  - `AccessRuleError` (from core) maps to a **500 naming the rule** in `toErrorResponse`: a rule
+    that answers a `Where` where only a boolean makes sense is the host's bug, not the caller's.
+  - `collections/query.ts` accepts `FilterOp | FilterOp[]` per field, the array shape `mergeWhere`
+    produces, so a client may send it too.
 - **falling.ts** — `FallingHandler`, in its own leaf module because `handler.ts` imports
   `globals/handler.ts`: a package that needs the type but must not be imported _by_ `createHandler`
   (`@shuri/auth`) takes it from here with no cycle. `CreateHandlerOptions.handlers` are **prepended**
