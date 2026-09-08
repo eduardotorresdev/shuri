@@ -6,7 +6,7 @@ import type {
   InferGlobals,
 } from "@shuri/core";
 import type { StoreAdapter } from "./adapter.js";
-import { createEventBus, type StoreEventBus } from "./events/bus.js";
+import { createHookRegistry, type HookRegistry } from "./hooks/registry.js";
 import { bindCollection, type CollectionStore } from "./collections/store.js";
 import { UnknownCollectionError } from "./collections/errors.js";
 import { bindGlobal, type GlobalStore } from "./globals/store.js";
@@ -15,9 +15,8 @@ import { UnknownGlobalError } from "./globals/errors.js";
 /**
  * Single persistence entry point for every collection and global declared on a `Core`, backed by
  * one adapter. `collection(slug)`/`global(slug)` are typed per the fields declared for that slug:
- * `T`/`G` flow in from `createCore`. Every store owns one event bus, published to by every write
- * and read back through `CollectionStore.subscribe`/`GlobalStore.subscribe` and `@shuri/api`'s SSE
- * route.
+ * `T`/`G` flow in from `createCore`. Every store owns one hook registry: the hooks registered on it
+ * run after the ones each schema declares, for every operation of every collection and global.
  */
 export interface Store<
   T extends readonly CollectionSchema[] = CollectionSchema[],
@@ -27,14 +26,14 @@ export interface Store<
     slug: S,
   ): CollectionStore<InferCollections<T>[S]>;
   global<S extends G[number]["slug"]>(slug: S): GlobalStore<InferGlobals<G>[S]>;
-  /** Every event of every collection and global of this store, in one stream. */
-  readonly events: StoreEventBus;
+  /** Registers hooks at runtime, next to the ones the schema declares. `"*"` targets every slug. */
+  readonly hooks: HookRegistry;
 }
 
 /**
  * Wires every collection and global declared on `core` to `adapter`, resolving one `CollectionStore`
- * per collection slug and one `GlobalStore` per global slug, all publishing to a single event bus
- * exposed as `store.events`.
+ * per collection slug and one `GlobalStore` per global slug, all running the hooks of a single
+ * registry exposed as `store.hooks`.
  * @param core - The core holding the declared collection and global schemas.
  * @param adapter - The persistence adapter backing every collection and global.
  * @returns A `Store` exposing one `CollectionStore`/`GlobalStore` per declared slug.
@@ -45,10 +44,10 @@ export function createStore<
 >(core: Core<T, G>, adapter: StoreAdapter): Store<T, G> {
   const collections = new Map<string, CollectionStore>();
   const globals = new Map<string, GlobalStore>();
-  const events = createEventBus();
+  const hooks = createHookRegistry();
 
   return {
-    events,
+    hooks,
     collection(slug: string) {
       const cached = collections.get(slug);
       if (cached) return cached as never;
@@ -56,11 +55,7 @@ export function createStore<
       const schema = core.getCollection(slug as T[number]["slug"]);
       if (!schema) throw new UnknownCollectionError(slug);
 
-      const bound = bindCollection(
-        schema as unknown as CollectionSchema,
-        adapter,
-        events,
-      );
+      const bound = bindCollection(schema as unknown as CollectionSchema, adapter, hooks);
       collections.set(slug, bound);
       return bound as never;
     },
@@ -71,7 +66,7 @@ export function createStore<
       const schema = core.getGlobal(slug as G[number]["slug"]);
       if (!schema) throw new UnknownGlobalError(slug);
 
-      const bound = bindGlobal(schema as unknown as GlobalSchema, adapter, events);
+      const bound = bindGlobal(schema as unknown as GlobalSchema, adapter, hooks);
       globals.set(slug, bound);
       return bound as never;
     },

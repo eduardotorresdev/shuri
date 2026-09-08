@@ -2,7 +2,6 @@ import type { GlobalSchema } from "@shuri/core";
 import { createCore } from "@shuri/core";
 import { describe, expect, it, vi } from "vitest";
 import { RecordValidationError } from "../errors.js";
-import type { GlobalEvent } from "../events/types.js";
 import { createStore } from "../store.js";
 import { createFakeAdapter } from "../test-support.js";
 
@@ -60,41 +59,64 @@ describe("GlobalStore", () => {
   });
 });
 
-describe("GlobalStore events", () => {
-  it("emits an update carrying the merged record, before the update resolves", async () => {
-    const core = createCore({ collections: [], globals: [siteSettings] });
+describe("GlobalStore hooks", () => {
+  it("runs schema-declared hooks before registered ones, with the pre-image and the merged record", async () => {
+    const seen: unknown[] = [];
+    const siteWithHooks: GlobalSchema = {
+      ...siteSettings,
+      hooks: {
+        beforeChange: [
+          ({ data, originalDoc }) => {
+            seen.push(["schema:before", data, originalDoc]);
+            return { ...data, visits: 1 };
+          },
+        ],
+      },
+    };
+    const core = createCore({ collections: [], globals: [siteWithHooks] });
     const store = createStore(core, createFakeAdapter());
-    const events: GlobalEvent[] = [];
-    store.global("site").subscribe((event) => events.push(event));
+    store.hooks.onGlobal("site", "afterChange", ({ doc, previousDoc }) => {
+      seen.push(["registered:after", doc, previousDoc]);
+    });
 
     await store.global("site").update({ name: "Acme" });
-    await store.global("site").update({ visits: 2 });
+    await store.global("site").update({ name: "Acme Co" });
 
-    expect(events).toEqual([
-      { scope: "global", type: "update", global: "site", record: { name: "Acme" } },
-      {
-        scope: "global",
-        type: "update",
-        global: "site",
-        record: { name: "Acme", visits: 2 },
-      },
+    expect(seen).toEqual([
+      ["schema:before", { name: "Acme" }, {}],
+      ["registered:after", { name: "Acme", visits: 1 }, {}],
+      ["schema:before", { name: "Acme Co" }, { name: "Acme", visits: 1 }],
+      ["registered:after", { name: "Acme Co", visits: 1 }, { name: "Acme", visits: 1 }],
     ]);
   });
 
-  it("delivers only this global's events, and emits nothing for a rejected update", async () => {
+  it("runs beforeRead and afterRead around get, letting afterRead replace the record", async () => {
+    const core = createCore({ collections: [], globals: [siteSettings] });
+    const store = createStore(core, createFakeAdapter());
+    const reads: string[] = [];
+    store.hooks.onGlobal("site", "beforeRead", ({ global }) => {
+      reads.push(global);
+    });
+    store.hooks.onGlobal("*", "afterRead", ({ doc }) => ({ ...doc, computed: true }));
+
+    expect(await store.global("site").get()).toEqual({ computed: true });
+    expect(reads).toEqual(["site"]);
+  });
+
+  it("runs a hook only for its own global, and no after hook for a rejected update", async () => {
     const core = createCore({
       collections: [],
       globals: [siteSettings, seoDefaults],
     });
     const store = createStore(core, createFakeAdapter());
-    const events: GlobalEvent[] = [];
-    store.global("site").subscribe((event) => events.push(event));
+    const afterChange = vi.fn();
+    store.hooks.onGlobal("site", "afterChange", afterChange);
 
     await store.global("seo").update({ name: "Ignored" });
     await expect(store.global("site").update({ visits: -1 })).rejects.toThrow(
       RecordValidationError,
     );
 
-    expect(events).toEqual([]);
+    expect(afterChange).not.toHaveBeenCalled();
   });
 });

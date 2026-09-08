@@ -1,29 +1,6 @@
 /**
- * Engine-agnostic filter/sort/pagination AST that adapters translate into their own native query
- * language (SQL, an ORM's builder, etc.).
+ * The engine-agnostic filter/sort/pagination AST adapters translate into their own native query
+ * language. Declared in `@shuri/core` (an access rule answers with a `Where`, and core can't import
+ * this package) and re-exported here, so every adapter and consumer keeps importing it from the store.
  */
-export type FilterOp =
-  | { op: "eq"; value: unknown }
-  | { op: "ne"; value: unknown }
-  | { op: "gt"; value: unknown }
-  | { op: "gte"; value: unknown }
-  | { op: "lt"; value: unknown }
-  | { op: "lte"; value: unknown }
-  | { op: "in"; value: unknown[] }
-  | { op: "contains"; value: string };
-
-export type Where = Record<string, FilterOp>;
-
-export type SortDirection = "asc" | "desc";
-
-export interface OrderBy {
-  field: string;
-  direction?: SortDirection;
-}
-
-export interface Query {
-  where?: Where;
-  orderBy?: OrderBy[];
-  limit?: number;
-  offset?: number;
-}
+export type { FilterOp, OrderBy, Query, SortDirection, Where } from "@shuri/core";

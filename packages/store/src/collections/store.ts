@@ -1,32 +1,18 @@
-import type { CollectionSchema } from "@shuri/core";
+import type { CollectionSchema, OperationContext } from "@shuri/core";
 import type { StoreAdapter } from "../adapter.js";
-import type { StoreEventBus } from "../events/bus.js";
-import type {
-  CollectionEvent,
-  RecordEvent,
-  StoreEvent,
-  StoreEventListener,
-  Unsubscribe,
-} from "../events/types.js";
+import type { HookRegistry } from "../hooks/registry.js";
+import { collectionHooksFor } from "../hooks/resolve.js";
+import { runAfterHooks, runBeforeHooks } from "../hooks/run.js";
 import type { RecordId, RecordInput, StoreRecord } from "../record.js";
 import { assertValidRecord } from "../validate-record.js";
 import { RecordNotFoundError } from "./errors.js";
 import type { Query } from "./query.js";
 
 /**
- * Listens to this collection's events, either all of them or only one record's. Declared as an
- * overloaded call signature (rather than an overloaded method) so the implementation is a single
- * arrow checked against both signatures at once.
- */
-export interface CollectionSubscribe<R = RecordInput> {
-  /** Every create, update and delete of this collection. */
-  (listener: StoreEventListener<CollectionEvent<R>>): Unsubscribe;
-  /** Only the updates and deletes of `id` — whoever already holds an id can't be told of its creation. */
-  (id: RecordId, listener: StoreEventListener<RecordEvent<R>>): Unsubscribe;
-}
-
-/**
- * Persistence operations scoped to a single collection.
+ * Persistence operations scoped to a single collection. Every operation runs the collection's
+ * hooks (schema-declared, then registered) around the adapter call; the optional trailing
+ * `context` is what those hooks see as `context` — `@shuri/api` passes the request and principal,
+ * a direct call passes nothing.
  *
  * **This store is the complete view.** It carries `schema` — `hidden` fields and `internal`
  * collections included — and never applies either flag: both are HTTP-surface metadata, applied by
@@ -40,103 +26,160 @@ export interface CollectionStore<R = RecordInput> {
    * that forgot it serve a hidden field with no error at all.
    */
   readonly schema: CollectionSchema;
-  findMany(query?: Query): Promise<StoreRecord<R>[]>;
-  findOne(id: RecordId): Promise<StoreRecord<R> | undefined>;
+  /** `beforeRead(list)` may replace the query; `afterRead` runs once per record returned. */
+  findMany(query?: Query, context?: OperationContext): Promise<StoreRecord<R>[]>;
+  /** `beforeRead(get)`, then `afterRead` for the record — skipped when nothing was found. */
+  findOne(id: RecordId, context?: OperationContext): Promise<StoreRecord<R> | undefined>;
   /** Throws `RecordNotFoundError` when the record doesn't exist, like `findOne` returns `undefined`. */
-  get(id: RecordId): Promise<StoreRecord<R>>;
+  get(id: RecordId, context?: OperationContext): Promise<StoreRecord<R>>;
+  /** Runs no hooks. */
   count(query?: Query): Promise<number>;
-  insert(data: R): Promise<StoreRecord<R>>;
-  update(id: RecordId, data: Partial<R>): Promise<StoreRecord<R>>;
+  /** `beforeValidate` → field validation → `beforeChange` → adapter → `afterChange(create)`. */
+  insert(data: R, context?: OperationContext): Promise<StoreRecord<R>>;
   /**
-   * Emits a `delete` event whenever the adapter accepts the call, including for an id that never
-   * existed: the adapter resolves to `void` and no pre-check is run, so the event means "a delete
-   * was accepted", not "a record stopped existing".
+   * Reads the pre-image first (throwing `RecordNotFoundError` when there is none), then
+   * `beforeValidate` → partial field validation → `beforeChange` → adapter → `afterChange(update)`,
+   * the last one carrying the pre-image as `previousDoc`.
    */
-  delete(id: RecordId): Promise<void>;
-  /** Subscribes to this collection's events, or to a single record's. Returns the unsubscribe function. */
-  subscribe: CollectionSubscribe<R>;
+  update(
+    id: RecordId,
+    data: Partial<R>,
+    context?: OperationContext,
+  ): Promise<StoreRecord<R>>;
+  /**
+   * Reads the pre-image (which may not exist), then `beforeDelete` → adapter → `afterDelete`. A
+   * delete of an id that never existed is still accepted, as the adapter accepts it: the hooks then
+   * run with `doc` undefined, meaning "a delete was accepted", not "a record stopped existing".
+   */
+  delete(id: RecordId, context?: OperationContext): Promise<void>;
 }
 
 /**
- * Binds one collection's CRUD to `adapter`, publishing every accepted write to `events`. Emission
- * happens after the adapter resolves and before the caller's `await` does, so a write that throws
- * (validation or adapter) emits nothing, and every listener has already run by the time
- * `await insert(...)` returns.
+ * Binds one collection's CRUD to `adapter`, running the collection's hooks around every call. A
+ * _before_ hook that throws aborts the operation before the adapter is touched; an _after_ hook
+ * that throws propagates to the caller, the write already done. Every hook has run by the time the
+ * caller's `await` resolves.
  * @param collection - The schema of the collection being bound.
  * @param adapter - The persistence adapter backing the collection.
- * @param events - The bus every accepted write is published to.
+ * @param registry - The registry of programmatically registered hooks.
  * @returns The `CollectionStore` for `collection`.
  */
 export function bindCollection(
   collection: CollectionSchema,
   adapter: StoreAdapter,
-  events: StoreEventBus,
+  registry: HookRegistry,
 ): CollectionStore {
-  const isOwnEvent = (event: StoreEvent): event is CollectionEvent =>
-    event.scope === "collection" && event.collection === collection.slug;
+  const slug = collection.slug;
+  const hooks = <N extends Parameters<typeof collectionHooksFor>[2]>(name: N) =>
+    collectionHooksFor(collection, registry, name);
 
-  const subscribe: CollectionSubscribe = (
-    idOrListener: RecordId | StoreEventListener<CollectionEvent>,
-    maybeListener?: StoreEventListener<RecordEvent>,
-  ): Unsubscribe => {
-    // Arity dispatch for the overloaded signature above, not input validation.
-    if (maybeListener === undefined) {
-      const listener = idOrListener as StoreEventListener<CollectionEvent>;
-      return events.subscribe((event) => {
-        if (isOwnEvent(event)) listener(event);
-      });
-    }
+  async function afterRead(
+    doc: StoreRecord,
+    operation: "list" | "get",
+    context: OperationContext,
+    query?: Query,
+  ): Promise<StoreRecord> {
+    return runBeforeHooks(
+      hooks("afterRead"),
+      { collection: slug, context, operation, doc, query },
+      "doc",
+    );
+  }
 
-    const id = idOrListener as RecordId;
-    return events.subscribe((event) => {
-      if (isOwnEvent(event) && event.type !== "create" && event.id === id)
-        maybeListener(event);
+  async function findOne(
+    id: RecordId,
+    context: OperationContext = {},
+  ): Promise<StoreRecord | undefined> {
+    await runAfterHooks(hooks("beforeRead"), {
+      collection: slug,
+      context,
+      operation: "get",
+      id,
     });
-  };
+    const record = await adapter.findOne(collection, id);
+    return record && afterRead(record, "get", context);
+  }
 
   return {
     schema: collection,
-    findMany: (query) => adapter.findMany(collection, query),
-    findOne: (id) => adapter.findOne(collection, id),
-    async get(id) {
-      const record = await adapter.findOne(collection, id);
-      if (!record) throw new RecordNotFoundError(collection.slug, id);
+    async findMany(query, context = {}) {
+      const finalQuery = await runBeforeHooks(
+        hooks("beforeRead"),
+        { collection: slug, context, operation: "list", query },
+        "query",
+      );
+      const records = await adapter.findMany(collection, finalQuery);
+      const result: StoreRecord[] = [];
+      for (const record of records) {
+        result.push(await afterRead(record, "list", context, finalQuery));
+      }
+      return result;
+    },
+    findOne,
+    async get(id, context) {
+      const record = await findOne(id, context);
+      if (!record) throw new RecordNotFoundError(slug, id);
       return record;
     },
     count: (query) => adapter.count(collection, query),
-    async insert(data) {
-      assertValidRecord(collection, data);
-      const record = await adapter.insert(collection, data);
-      events.emit({
-        scope: "collection",
-        type: "create",
-        collection: collection.slug,
-        id: record.id,
-        record,
+    async insert(input, context = {}) {
+      const validated = await runBeforeHooks(
+        hooks("beforeValidate"),
+        { collection: slug, context, operation: "create", data: input },
+        "data",
+      );
+      assertValidRecord(collection, validated);
+      const data = await runBeforeHooks(
+        hooks("beforeChange"),
+        { collection: slug, context, operation: "create", data: validated },
+        "data",
+      );
+      const doc = await adapter.insert(collection, data);
+      await runAfterHooks(hooks("afterChange"), {
+        collection: slug,
+        context,
+        operation: "create",
+        doc,
       });
-      return record;
+      return doc;
     },
-    async update(id, data) {
-      assertValidRecord(collection, data, { partial: true });
-      const record = await adapter.update(collection, id, data);
-      events.emit({
-        scope: "collection",
-        type: "update",
-        collection: collection.slug,
-        id: record.id,
-        record,
+    async update(id, input, context = {}) {
+      const originalDoc = await adapter.findOne(collection, id);
+      if (!originalDoc) throw new RecordNotFoundError(slug, id);
+
+      const validated = await runBeforeHooks(
+        hooks("beforeValidate"),
+        { collection: slug, context, operation: "update", data: input, originalDoc, id },
+        "data",
+      );
+      assertValidRecord(collection, validated, { partial: true });
+      const data = await runBeforeHooks(
+        hooks("beforeChange"),
+        {
+          collection: slug,
+          context,
+          operation: "update",
+          data: validated,
+          originalDoc,
+          id,
+        },
+        "data",
+      );
+      const doc = await adapter.update(collection, id, data);
+      await runAfterHooks(hooks("afterChange"), {
+        collection: slug,
+        context,
+        operation: "update",
+        doc,
+        previousDoc: originalDoc,
       });
-      return record;
+      return doc;
     },
-    async delete(id) {
+    async delete(id, context = {}) {
+      const doc = await adapter.findOne(collection, id);
+      await runAfterHooks(hooks("beforeDelete"), { collection: slug, context, id, doc });
       await adapter.delete(collection, id);
-      events.emit({
-        scope: "collection",
-        type: "delete",
-        collection: collection.slug,
-        id,
-      });
+      await runAfterHooks(hooks("afterDelete"), { collection: slug, context, id, doc });
     },
-    subscribe,
   };
 }
