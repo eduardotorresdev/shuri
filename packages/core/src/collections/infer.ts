@@ -9,7 +9,9 @@ type FieldValue<F extends Field> = F extends {
 }
   ? string
   : F extends SelectField
-    ? F["options"][number]["value"]
+    ? F["multiple"] extends true
+      ? F["options"][number]["value"][]
+      : F["options"][number]["value"]
     : F extends { type: "number" }
       ? number
       : F extends { type: "boolean" }

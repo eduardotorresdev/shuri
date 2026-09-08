@@ -1,5 +1,9 @@
 import { keyedArray, object, required, type Validator } from "@shuri/validate";
+import { GLOBAL_ACCESS_OPS } from "../access/types.js";
+import { accessValidator } from "../access/validator.js";
 import { fieldsValidator } from "../fields/validator.js";
+import { GLOBAL_HOOK_NAMES } from "../hooks/types.js";
+import { hooksValidator } from "../hooks/validator.js";
 import type { GlobalSchema } from "./types.js";
 
 function globalValidator(collectionSlugs: Set<string>): Validator<GlobalSchema> {
@@ -7,6 +11,8 @@ function globalValidator(collectionSlugs: Set<string>): Validator<GlobalSchema> 
     slug: required('"slug" is required'),
     title: required('"title" is required'),
     category: object({ title: required('"title" is required') }),
+    access: accessValidator(GLOBAL_ACCESS_OPS),
+    hooks: hooksValidator(GLOBAL_HOOK_NAMES),
     fields: fieldsValidator(collectionSlugs),
   });
 }

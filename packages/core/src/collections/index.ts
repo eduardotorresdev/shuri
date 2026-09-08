@@ -7,3 +7,4 @@ export * from "./define.js";
 export * from "./infer.js";
 export * from "./validate-record.js";
 export * from "./redact.js";
+export * from "./query.js";

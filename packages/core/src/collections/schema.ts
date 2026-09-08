@@ -6,7 +6,11 @@ import {
   required,
   type Validator,
 } from "@shuri/validate";
+import { COLLECTION_ACCESS_OPS } from "../access/types.js";
+import { accessValidator } from "../access/validator.js";
 import { fieldsValidator } from "../fields/validator.js";
+import { COLLECTION_HOOK_NAMES } from "../hooks/types.js";
+import { hooksValidator } from "../hooks/validator.js";
 import type { CollectionSchema } from "./types.js";
 
 function collectionValidator(slugs: Set<string>): Validator<CollectionSchema> {
@@ -16,6 +20,8 @@ function collectionValidator(slugs: Set<string>): Validator<CollectionSchema> {
     singular: required('"singular" is required'),
     plural: required('"plural" is required'),
     internal: optional(boolean('"internal" must be a boolean')),
+    access: accessValidator(COLLECTION_ACCESS_OPS),
+    hooks: hooksValidator(COLLECTION_HOOK_NAMES),
     fields: fieldsValidator(slugs),
   });
 }

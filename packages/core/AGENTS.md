@@ -2,7 +2,10 @@
 
 Defines and validates the schema that describes the CMS — **collections** (record lists) and
 **globals** (single records) — and infers the TS types of records from that schema. Persistence lives
-in `@shuri/store` and HTTP serving in `@shuri/api`; this package is purely declarative.
+in `@shuri/store` and HTTP serving in `@shuri/api`; this package is purely declarative. The one
+runtime concern it owns is the _meaning_ of the schema's surface flags (`hidden`, `internal`,
+`access`): pure functions other packages apply. Lifecycle `hooks` are declared and validated here
+too, and run by `@shuri/store`.
 
 ## Tree
 
@@ -13,19 +16,31 @@ src/
     validator.ts               fieldValidator/fieldsValidator: shape of a Field (shared)
     validator.test.ts
   collections/
-    types.ts                    CollectionSchema (slug, title, singular, plural, orderable?, internal?, fields)
+    types.ts                    CollectionSchema (slug, title, singular, plural, orderable?, internal?, access?, hooks?, fields)
     fields.ts                    Field union (text/textarea/email/select/number/boolean/relation)
     schema.ts                    collectionsValidator: shape of the collections array
     validate.ts                  validateCollections: runs the validator, formats issues into string[]
     define.ts                    defineCollections, createCore/Core/CoreConfig — entry point
     validate-record.ts           recordValidator/validateRecord: validates a RECORD against fields
     redact.ts                    hiddenFieldNames/redactRecord(s)/servableCollections: what hidden/internal mean
+    query.ts                     the Query AST (FilterOp, Where, OrderBy, Query) — re-exported by @shuri/store
     infer.ts                     InferFields/InferCollection/InferCollections (schema -> TS type)
     errors.ts                    CollectionSchemaError
     define.test.ts, validate.test.ts, validate-record.test.ts, redact.test.ts
     test/create-core.test.ts     integration test for createCore
+  access/
+    types.ts                    AccessContext/Principal/AccessRule/AccessResult, the op lists
+    scopes.ts                    scopeFor/derivedScopes/expandScopes: the `<slug>:<op>` vocabulary
+    policy.ts                    evaluateRule/authorize/authorizeCollection/authorizeGlobal: the policy table
+    validator.ts                 accessValidator: shape of an `access` map (booleans or functions)
+    errors.ts                    AccessRuleError (a Where where only a boolean makes sense)
+    scopes.test.ts, policy.test.ts, validator.test.ts
+  hooks/
+    types.ts                    OperationContext, the hook arg/fn types per name, CollectionHooks/GlobalHooks
+    validator.ts                 hooksValidator: shape of a `hooks` map (arrays of functions per known name)
+    validator.test.ts
   globals/
-    types.ts                    GlobalSchema (slug, title, category, fields), GlobalCategory
+    types.ts                    GlobalSchema (slug, title, category, access?, hooks?, fields), GlobalCategory
     schema.ts                    globalsValidator: shape of the globals array
     define.ts                    defineGlobals
     infer.ts                     InferGlobal/InferGlobals
@@ -40,7 +55,14 @@ src/
   existing collection slug. Used by both `collections/schema.ts` and `globals/schema.ts`.
 - **collections/fields.ts** — the `Field` union and its subtypes; the field-type vocabulary of the
   whole CMS (`text`, `textarea`, `email`, `select`, `number`, `boolean`, `relation`), plus `hidden?`
-  on `FieldBase`.
+  and `index?` on `FieldBase`.
+- **`index` (a field)** — a hint to the adapter: index this field for equality lookups
+  (`where: { field: { op: "eq" } }`). Without it a lookup by value is a scan of the whole
+  collection in every adapter (the memory adapter copies and filters the table, Mongo walks the
+  collection). `@shuri/auth` declares it on every field it looks up per request
+  (`_sessions.tokenHash`, `_client_tokens.tokenHash`, `_clients.clientId`, `users.email`, ...).
+  Validated as a boolean, applied by `@shuri/store-memory` (a secondary `Map`) and
+  `@shuri/store-mongo` (`createIndex` on first touch); not a uniqueness constraint.
 - **`hidden` (a field) and `internal` (a collection)** — two flags this package declares, validates
   _and defines the meaning of_ (`redact.ts`), but never applies on its own. They are HTTP-surface
   metadata: `hidden` keeps a value out of REST responses, SSE frames and the OpenAPI document and
@@ -56,6 +78,40 @@ src/
   package gets the same definition of "what hidden/internal mean" for free instead of reinventing it.
   `@shuri/api`'s `visibility/` folder is where they are _enforced_ (the HTTP-shaped guards, errors and
   narrowed views) — it imports these functions rather than defining its own.
+- **`access` (a collection or a global)** — the third surface flag, next to `hidden`/`internal`,
+  declared here and applied by `@shuri/api`'s `access/` folder once the host turns auth on. Per
+  operation (`create`/`list`/`view`/`update`/`delete` for a collection, `read`/`update` for a
+  global) a rule is `boolean` or `(ctx) => boolean | Where | Promise<...>`, Payload CMS style: `ctx`
+  carries the `principal` (with `user`/`client` shortcuts), the `request`, and the `id`/`data` of the
+  operation. `access/policy.ts` is the whole policy in one function: no rule means "any signed-in
+  principal, never anonymous"; a rule decides for users and anonymous alike; a **client** (a
+  client-credentials token) must hold the scope `<slug>:<op>` _and_ pass the rule — its scopes are a
+  ceiling the rule can only lower, so a public rule never spares a client its scope. A `Where` is a
+  row restriction, meaningful only for `list`/`view`/`update`/`delete`; a rule answering with one for
+  `create` or for a global throws `AccessRuleError` (fail closed, and loudly). Scopes are not
+  declared anywhere: `derivedScopes` computes the universe from the schema (`internal` collections
+  yield none), and `expandScopes` turns role patterns (`*`, `posts:*`, `*:list`, literal) into it at
+  token issuance. Like `redact.ts`, this folder _defines_; enforcement is elsewhere.
+- **`hooks` (a collection or a global)** — Payload CMS's lifecycle vocabulary, declared here and run
+  by `@shuri/store` around every operation, whichever surface it came through (SDK, REST, or a
+  future admin). A collection takes `beforeValidate`, `beforeChange`, `afterChange`, `beforeRead`,
+  `afterRead`, `beforeDelete` and `afterDelete`; a global the same set minus the delete pair. Each is
+  an **array** of functions run in declaration order, and a schema-declared hook runs before one
+  registered at runtime (`app.hooks.onCollection(slug, name, fn)`, which is the PocketBase side of
+  the same idea). The _before_ hooks of a write (`beforeValidate` before field validation,
+  `beforeChange` after it) may return a replacement `data`; `beforeRead` may return a replacement
+  `query` for a list; `afterRead` runs once per record returned and may replace the `doc`; the
+  _after_ hooks of a write receive the persisted `doc` (plus `previousDoc` on update) and return
+  nothing. Every hook gets an `OperationContext`: `@shuri/api` fills in the `request` and, with
+  access on, the `principal`, so a hook can react to who did what; a call through the SDK carries an
+  empty one. Hook args are typed over `HookRecord` (`Record<string, unknown>`) in the schema, since a
+  literal can't reference its own `fields`; the SDK's `app.hooks` narrows them per slug. Like
+  `access`, `hooks/validator.ts` validates the _shape_ (known names, arrays of functions); what a
+  hook does is only known when it runs.
+- **collections/query.ts** — the `Query` AST every adapter receives, moved here from `@shuri/store`
+  (which re-exports it, so nothing imports it differently) because an access rule answers with a
+  `Where` and this package can't depend on the store. `Where` allows `FilterOp | FilterOp[]` per
+  field — the array ANDs — so a client's `where` and a rule's `Where` merge without either winning.
 - **collections/schema.ts** / **globals/schema.ts** — validate the _shape of the declared schema
   itself_ (unique slugs, required schema fields, well-formed fields); records are validated
   separately, by `collections/validate-record.ts`.
@@ -67,7 +123,8 @@ src/
   the package's entry point: validates collections, then globals (which may reference collection
   slugs via `relation`), and returns a `Core` with typed `getCollection(slug)`/`getGlobal(slug)`.
 - **collections/infer.ts** / **globals/infer.ts** — map declared `fields` to the TS shape of the
-  record (`InferCollection<C>`, `InferGlobal<G>`), with no manual types needed anywhere.
+  record (`InferCollection<C>`, `InferGlobal<G>`), with no manual types needed anywhere. A `select`
+  with `multiple: true` infers (and validates) as a list of its options, like a multiple `relation`.
 - **errors.ts** (in both) — `CollectionSchemaError`/`GlobalSchemaError`, thrown by `define*` to
   report a malformed _schema_; `RecordValidationError` (in `@shuri/store`) reports the other case, a
   _record_ that conflicts with an already-valid schema.
@@ -77,6 +134,8 @@ src/
 `@shuri/store` uses `validateRecord`/`RecordSchema` to guard `insert`/`update`. `@shuri/sdk` uses
 `createCore` as the first step of `create()`. `@shuri/api` depends on this package for real (not just
 types): it calls `redact.ts`'s functions from its `visibility/` folder to enforce `hidden`/`internal`,
-and reads `Core`/`CollectionSchema`/`GlobalSchema`/`Field` to build the OpenAPI document — leaving the
-`createCore` call itself to `@shuri/sdk`. `@shuri/auth` declares its four collections as plain schema
-literals of this package.
+reads `Core`/`CollectionSchema`/`GlobalSchema`/`Field` to build the OpenAPI document, and calls
+`access/policy.ts` from its `access/` folder — leaving the `createCore` call itself to `@shuri/sdk`.
+`@shuri/auth` declares its six collections as plain schema literals of this package and expands
+client roles with `expandScopes`. `@shuri/store` runs the `hooks` declared here. `tsconfig` pulls in `@types/node` only for the `Request` type on
+`AccessContext`.

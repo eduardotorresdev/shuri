@@ -188,3 +188,36 @@ describe("validateRecord", () => {
     );
   });
 });
+
+describe("select with multiple: true", () => {
+  const tags: CollectionSchema = {
+    slug: "tagged",
+    title: "Tagged",
+    singular: "Tagged",
+    plural: "Tagged",
+    fields: [
+      {
+        type: "select",
+        name: "tags",
+        multiple: true,
+        options: [
+          { label: "A", value: "a" },
+          { label: "B", value: "b" },
+        ],
+      },
+    ],
+  };
+
+  it("accepts a list of allowed options", () => {
+    expect(validateRecord(tags, { tags: ["a", "b"] })).toEqual([]);
+    expect(validateRecord(tags, { tags: [] })).toEqual([]);
+  });
+
+  it("rejects a single string, and a list with an unknown option", () => {
+    for (const value of ["a", ["a", "zzz"], [1]]) {
+      expect(validateRecord(tags, { tags: value })).toEqual([
+        expect.objectContaining({ message: '"tags" must be a list of valid options' }),
+      ]);
+    }
+  });
+});

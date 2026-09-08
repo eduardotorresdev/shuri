@@ -92,3 +92,47 @@ describe("globalsValidator", () => {
     expect(issues).toEqual([]);
   });
 });
+
+describe("globalsValidator access", () => {
+  it("accepts read/update rules and rejects a collection-only op", () => {
+    expect(
+      validate(
+        [baseGlobal({ access: { read: () => true, update: false } })],
+        globalsValidator(new Set()),
+      ),
+    ).toEqual([]);
+    expect(
+      validate(
+        [baseGlobal({ access: { list: true } as never })],
+        globalsValidator(new Set()),
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        path: "site.access.list",
+        message: '"list" is not an access operation (read, update)',
+      }),
+    ]);
+  });
+});
+
+describe("globalsValidator hooks", () => {
+  it("accepts the global hook names and rejects the delete pair", () => {
+    expect(
+      validate(
+        [baseGlobal({ hooks: { beforeChange: [({ data }) => data], afterRead: [] } })],
+        globalsValidator(new Set()),
+      ),
+    ).toEqual([]);
+    expect(
+      validate(
+        [baseGlobal({ hooks: { afterDelete: [] } as never })],
+        globalsValidator(new Set()),
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        path: "site.hooks.afterDelete",
+        message: expect.stringContaining('"afterDelete" is not a hook'),
+      }),
+    ]);
+  });
+});

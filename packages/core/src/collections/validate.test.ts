@@ -29,6 +29,36 @@ describe("validateCollections", () => {
     expect(issues).toEqual([expect.stringContaining('"internal" must be a boolean')]);
   });
 
+  it("accepts access rules as booleans or functions, and rejects anything else", () => {
+    expect(
+      validateCollections([
+        baseCollection({
+          access: { list: true, view: () => ({ a: { op: "eq", value: 1 } }) },
+        }),
+      ]),
+    ).toEqual([]);
+    expect(
+      validateCollections([baseCollection({ access: { list: "yes" as never } })]),
+    ).toEqual([expect.stringContaining('"list" must be a boolean or a function')]);
+    expect(
+      validateCollections([baseCollection({ access: { read: true } as never })]),
+    ).toEqual([expect.stringContaining('"read" is not an access operation')]);
+  });
+
+  it("accepts hooks as arrays of functions, and rejects anything else", () => {
+    expect(
+      validateCollections([
+        baseCollection({ hooks: { beforeChange: [({ data }) => data], afterRead: [] } }),
+      ]),
+    ).toEqual([]);
+    expect(
+      validateCollections([baseCollection({ hooks: { afterChange: [1] } as never })]),
+    ).toEqual([expect.stringContaining('"afterChange" hooks must be functions')]);
+    expect(
+      validateCollections([baseCollection({ hooks: { onSave: [] } as never })]),
+    ).toEqual([expect.stringContaining('"onSave" is not a hook')]);
+  });
+
   it("requires slug, title, singular and plural", () => {
     const issues = validateCollections([
       baseCollection({ slug: "", title: "", singular: "", plural: "" }),

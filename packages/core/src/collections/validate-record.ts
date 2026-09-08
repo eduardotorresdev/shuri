@@ -57,8 +57,17 @@ function valueValidator(field: Field): Validator<unknown> {
       }
       case "select": {
         const allowed = new Set(field.options.map((option) => option.value));
-        if (typeof value !== "string" || !allowed.has(value))
-          ctx.addIssue(`"${field.name}" is not a valid option`);
+        const values = field.multiple ? value : [value];
+        if (
+          !Array.isArray(values) ||
+          values.some((item) => typeof item !== "string" || !allowed.has(item))
+        ) {
+          ctx.addIssue(
+            field.multiple
+              ? `"${field.name}" must be a list of valid options`
+              : `"${field.name}" is not a valid option`,
+          );
+        }
         return;
       }
       case "number": {
