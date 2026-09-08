@@ -7,7 +7,9 @@ export interface SvelteKitRequestEvent {
 }
 
 /** Structurally matches SvelteKit's `Handle` input, so `toSvelteKitHandle(app)` slots straight into `export const handle`. */
-export interface SvelteKitHandleInput<Event extends SvelteKitRequestEvent = SvelteKitRequestEvent> {
+export interface SvelteKitHandleInput<
+  Event extends SvelteKitRequestEvent = SvelteKitRequestEvent,
+> {
   event: Event;
   resolve: (event: Event) => Response | Promise<Response>;
 }
@@ -29,7 +31,9 @@ export interface ToSvelteKitHandleOptions {
  * @param options - `base`, the path prefix routed to `app.handler`.
  * @returns A SvelteKit-`Handle`-shaped function.
  */
-export function toSvelteKitHandle<Event extends SvelteKitRequestEvent = SvelteKitRequestEvent>(
+export function toSvelteKitHandle<
+  Event extends SvelteKitRequestEvent = SvelteKitRequestEvent,
+>(
   app: Pick<ShuriApp, "handler">,
   options: ToSvelteKitHandleOptions = {},
 ): (input: SvelteKitHandleInput<Event>) => Response | Promise<Response> {

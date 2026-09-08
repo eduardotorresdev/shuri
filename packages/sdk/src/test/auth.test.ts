@@ -74,6 +74,40 @@ describe("an app with auth", () => {
     expect((await app.handler(post("/auth/login", credentials))).status).toBe(200);
   });
 
+  it("guards the REST routes once auth is on: anonymous 401, signed-in allowed", async () => {
+    expect(
+      (await app.handler(new Request("http://localhost/collections/posts"))).status,
+    ).toBe(401);
+    const cookie = sessionCookie(await app.handler(post("/auth/signup", credentials)));
+    const response = await app.handler(
+      new Request("http://localhost/collections/posts", {
+        headers: { cookie: `shuri_session=${cookie}` },
+      }),
+    );
+    expect(response.status).toBe(200);
+  });
+
+  it("describes how requests authenticate, and the scope each operation takes", async () => {
+    const document = (await (
+      await app.handler(new Request("http://localhost/openapi.json"))
+    ).json()) as {
+      paths: Record<string, Record<string, unknown>>;
+      components: { securitySchemes: Record<string, unknown> };
+    };
+    expect(Object.keys(document.components.securitySchemes)).toEqual([
+      "cookieAuth",
+      "bearerAuth",
+      "clientCredentials",
+    ]);
+    expect(document.paths["/collections/posts"]["post"]).toMatchObject({
+      security: [
+        { cookieAuth: [] },
+        { bearerAuth: [] },
+        { clientCredentials: ["posts:create"] },
+      ],
+    });
+  });
+
   it("keeps the auth collections out of the OpenAPI document", async () => {
     const document = (await (
       await app.handler(new Request("http://localhost/openapi.json"))
@@ -83,20 +117,27 @@ describe("an app with auth", () => {
     };
 
     expect(Object.keys(document.paths)).toContain("/collections/posts");
+    expect(Object.keys(document.paths)).toContain("/auth/token");
     expect(Object.keys(document.paths).join(" ")).not.toContain("users");
     expect(document.components.schemas["users"]).toBeUndefined();
     expect(document.components.schemas["_sessions"]).toBeUndefined();
   });
 
   it("never streams an auth write, while ordinary collections still stream", async () => {
+    // With auth on, the stream is guarded like every route: `posts` declares no rule, so it takes
+    // a signed-in principal, and the signup's cookie is what identifies this connection.
+    const cookie = sessionCookie(await app.handler(post("/auth/signup", credentials)));
     const response = await app.handler(
-      new Request("http://localhost/events", { signal: controller.signal }),
+      new Request("http://localhost/events", {
+        signal: controller.signal,
+        headers: { cookie: `shuri_session=${cookie}` },
+      }),
     );
     const frames = readFrames(response, 1);
 
-    // The signup writes a user and a session; if the first frame to arrive is the post's, neither
-    // produced one. Asserting absence in a live stream any other way is a race.
-    await app.handler(post("/auth/signup", credentials));
+    // The login writes a session; if the first frame to arrive is the post's, it produced none.
+    // Asserting absence in a live stream any other way is a race.
+    await app.handler(post("/auth/login", credentials));
     const created = await app.collections.posts.insert({ title: "Hello" });
 
     expect(await frames).toEqual([

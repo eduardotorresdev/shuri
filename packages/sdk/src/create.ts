@@ -14,17 +14,27 @@ import {
 } from "@shuri/auth";
 import {
   createCore,
+  derivedScopes,
+  type CollectionHook,
+  type CollectionHookName,
   type CollectionSchema,
+  type GlobalHook,
+  type GlobalHookName,
   type GlobalSchema,
+  type HookRecord,
   type InferCollection,
+  type InferCollections,
   type InferGlobal,
+  type InferGlobals,
 } from "@shuri/core";
 import {
   createStore,
   type CollectionStore,
   type GlobalStore,
+  type HookRegistry,
   type Store,
   type StoreAdapter,
+  type Unsubscribe,
 } from "@shuri/store";
 
 export interface CreateConfig<
@@ -44,9 +54,11 @@ export interface CreateConfig<
   /** Options for the OpenAPI document/docs page exposed on `app.handler`. See `@shuri/api`'s `createOpenApiHandler`. */
   openapi?: CreateOpenApiHandlerOptions;
   /**
-   * Turns authentication on. Declaring it merges `@shuri/auth`'s four collections into the schema,
-   * mounts its routes ahead of every built-in one, and exposes `app.auth`. Omitting it leaves the
-   * app exactly as it was, `app.auth` included — which is `undefined`.
+   * Turns authentication on. Declaring it merges `@shuri/auth`'s six collections into the schema,
+   * mounts its routes ahead of every built-in one, exposes `app.auth`, and turns the `access` rules
+   * of every collection and global on (an op with no rule needs a signed-in principal). Omitting it
+   * leaves the app exactly as it was, `app.auth` included — which is `undefined` — and every route
+   * open.
    */
   auth?: A;
 }
@@ -60,6 +72,36 @@ type AppCollections<T extends readonly CollectionSchema[]> = {
 type AppGlobals<G extends readonly GlobalSchema[]> = {
   [Gl in G[number] as Gl["slug"]]: GlobalStore<InferGlobal<Gl>>;
 };
+
+/** The record shape a hook on `S` sees: the slug's inferred record, or the generic one for `"*"`. */
+type HookRecordFor<Records, S extends string> = S extends "*"
+  ? HookRecord
+  : S extends keyof Records
+    ? Records[S]
+    : HookRecord;
+
+/**
+ * Programmatic hook registration, typed from the schema: `app.hooks.onCollection("posts",
+ * "afterChange", ({ doc }) => ...)` narrows `doc` to the `posts` record shape, and `"*"` (every
+ * collection/global) falls back to the generic one. A thin facade over `store.hooks`, the
+ * PocketBase side of the same mechanism the schema's `hooks` property is the Payload side of: the
+ * schema's hooks run first, then these, in registration order. Returns the unsubscribe function.
+ */
+export interface AppHooks<
+  T extends readonly CollectionSchema[],
+  G extends readonly GlobalSchema[],
+> {
+  onCollection<S extends T[number]["slug"] | "*", N extends CollectionHookName>(
+    slug: S,
+    name: N,
+    hook: CollectionHook<N, HookRecordFor<InferCollections<T>, S>>,
+  ): Unsubscribe;
+  onGlobal<S extends G[number]["slug"] | "*", N extends GlobalHookName>(
+    slug: S,
+    name: N,
+    hook: GlobalHook<N, HookRecordFor<InferGlobals<G>, S>>,
+  ): Unsubscribe;
+}
 
 /**
  * Facade tying a collections/globals schema to a persistence adapter - the single source of truth
@@ -91,6 +133,13 @@ export interface ShuriApp<
    * collide with a consumer's own slugs in the type.
    */
   auth: A extends AuthConfig ? AuthApi : undefined;
+  /** Registers lifecycle hooks at runtime, typed per slug. See `@shuri/core`'s `hooks/` for the vocabulary. */
+  hooks: AppHooks<T, G>;
+  /**
+   * The consumer's own schema, exactly as declared (auth's collections excluded). Its *type* is what
+   * `@shuri/client` is built from: `createClient<typeof app.schema>({ baseUrl })`.
+   */
+  schema: { collections: T; globals: G };
   handler: (request: Request) => Promise<Response>;
 }
 
@@ -135,6 +184,23 @@ function buildGlobals<
 }
 
 /**
+ * The typed facade over the store's registry. The hook a consumer passes is typed for one slug's
+ * record while the registry stores the generic shape, so the cast at this one boundary is what lets
+ * every call site stay fully typed.
+ * @param hooks - The store's registry.
+ * @returns The typed `app.hooks`.
+ */
+function buildHooks<
+  T extends readonly CollectionSchema[],
+  G extends readonly GlobalSchema[],
+>(hooks: HookRegistry): AppHooks<T, G> {
+  return {
+    onCollection: (slug, name, hook) => hooks.onCollection(slug, name, hook as never),
+    onGlobal: (slug, name, hook) => hooks.onGlobal(slug, name, hook as never),
+  };
+}
+
+/**
  * Entry point of `@shuri/sdk`. `T`/`G` are inferred from `collections`/`globals`, so every
  * `app.collections.<slug>`/`app.globals.<slug>` is typed per the fields declared for that slug, no
  * manual types needed.
@@ -156,20 +222,39 @@ export function create<
 
   const core = createCore({ collections, globals: config.globals as G });
   const store = createStore(core, config.adapter);
-  const auth = config.auth ? createAuth({ store, ...config.auth }) : undefined;
+  // `scopes` is what only the app knows: the concrete `<slug>:<op>` universe a client role expands
+  // against. Derived from the merged core, so auth's own internal collections yield none.
+  const auth = config.auth
+    ? createAuth({
+        store,
+        scopes: derivedScopes(core.collections, core.globals),
+        ...config.auth,
+      })
+    : undefined;
 
   return {
     collections: buildCollections(config.collections, store),
     globals: buildGlobals((config.globals ?? []) as G, store),
     auth: auth as ShuriApp<T, G, A>["auth"],
+    hooks: buildHooks(store.hooks),
+    schema: { collections: config.collections, globals: (config.globals ?? []) as G },
     handler: createHandler(
       { core, store },
       {
         handlers: auth ? [auth.handler] : undefined,
+        access: auth ? { principal: auth.principal } : undefined,
         api: config.api,
         globalsApi: config.globalsApi,
         realtime: config.realtime,
-        openapi: config.openapi,
+        // The auth routes are mounted ahead of the built-in ones, so the document must learn about
+        // them here — and about the cookie/bearer/client-credentials schemes every route accepts.
+        openapi: auth
+          ? {
+              paths: auth.openapi.paths,
+              security: auth.openapi.security,
+              ...config.openapi,
+            }
+          : config.openapi,
       },
     ),
   };

@@ -2,7 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import { toSvelteKitHandle } from "./sveltekit.js";
 
 function makeEvent(pathname: string) {
-  return { request: new Request(`http://localhost${pathname}`), url: new URL(`http://localhost${pathname}`) };
+  return {
+    request: new Request(`http://localhost${pathname}`),
+    url: new URL(`http://localhost${pathname}`),
+  };
 }
 
 describe("toSvelteKitHandle", () => {
@@ -11,7 +14,10 @@ describe("toSvelteKitHandle", () => {
     const resolve = vi.fn(async () => new Response("from sveltekit"));
     const handle = toSvelteKitHandle({ handler });
 
-    const response = await handle({ event: makeEvent("/api/collections/posts"), resolve });
+    const response = await handle({
+      event: makeEvent("/api/collections/posts"),
+      resolve,
+    });
 
     expect(await response.text()).toBe("from shuri");
     expect(resolve).not.toHaveBeenCalled();
