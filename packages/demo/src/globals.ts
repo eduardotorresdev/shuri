@@ -5,6 +5,7 @@ export const globals = [
     slug: "site",
     title: "Configurações do site",
     category: { title: "Geral" },
+    access: { read: () => true },
     fields: [
       { type: "text", name: "name", required: true, maxLength: 120 },
       { type: "text", name: "tagline", maxLength: 200 },

@@ -2,18 +2,25 @@
 
 The facade tying schema (`@shuri/core`) + persistence adapter (`@shuri/store`) + HTTP handlers
 (`@shuri/api`) + authentication (`@shuri/auth`) into a single app via `create()`:
-`app.collections.<slug>`, `app.globals.<slug>`, `app.auth`, `app.handler`. This is the package most consumers should import from directly.
+`app.collections.<slug>`, `app.globals.<slug>`, `app.auth`, `app.hooks`, `app.schema`, `app.handler`. This is the
+package most consumers should import from directly.
 
 ## Tree
 
 ```
 src/
-  index.ts                    re-exports create.js
+  index.ts                    re-exports create.js and sveltekit.js, plus the auth/core types
   create.ts                    create(), ShuriApp, CreateConfig, AppCollections/AppGlobals
   create.test.ts               unit tests for create()
+  create.hooks.test.ts         unit tests for app.hooks
+  sveltekit.ts                 toSvelteKitHandle(app): routes a SvelteKit Handle to app.handler
+  sveltekit.test.ts
+  node.ts                      toNodeListener(app): node:http <-> web-standard Request/Response bridge
+  node.test.ts                 boots a real http.Server on port 0 and drives it with fetch
   test/
     handler.test.ts             integration test exercising app.handler end to end
     auth.test.ts                 integration test for an app with auth turned on
+    access.test.ts               integration test: Where rules and a scoped client, end to end
 ```
 
 ## What each part does
@@ -25,18 +32,46 @@ src/
   3. Builds `app.collections`/`app.globals`: one typed `CollectionStore`/`GlobalStore` per declared
      slug, so `app.collections.posts.insert(...)` and `app.globals.site.get()` are typed from the
      schema with no manual typing.
-  4. If `auth` is set, calls `createAuth({ store, ...config.auth })` for `app.auth`.
-  5. Builds `app.handler` by calling `createHandler` (`@shuri/api`), which composes the collections,
+  4. If `auth` is set, calls `createAuth({ store, scopes, ...config.auth })` for `app.auth`, with
+     `scopes = derivedScopes(core.collections, core.globals)` — the `<slug>:<op>` universe a client
+     role expands against, which only the app knows.
+  5. Builds `app.hooks`, the typed facade over `store.hooks` (see below), and `app.schema`, the
+     consumer's own `{ collections, globals }` — whose _type_ is what `@shuri/client` is instantiated
+     from (`createClient<typeof app.schema>`), so the client never has to repeat the schema.
+  6. Builds `app.handler` by calling `createHandler` (`@shuri/api`), which composes the collections,
      globals, event stream and OpenAPI handlers — the ordering and the base-path forwarding live
      there, so this package only forwards the per-handler options it was given. The auth handler goes
-     in through `options.handlers`, which prepends it.
+     in through `options.handlers`, which prepends it, and `auth.principal` through `options.access`,
+     which is what turns the `access` rules of every collection and global on, and
+     `auth.openapi.paths`/`security` through `options.openapi`, so `/openapi.json` describes the auth
+     routes and the cookie/bearer/client-credentials schemes (a host's own `openapi` options win). **Without `auth`,
+     no `access` is passed and every route stays open**, exactly as before.
+
+- **sveltekit.ts** — `toSvelteKitHandle(app, { base })`: routing glue, not a protocol bridge.
+  SvelteKit already hands the handler a `Request`, so requests under `base` (default `/api`) go to
+  `app.handler` and everything else falls through to `resolve`.
+- **node.ts** — `toNodeListener(app)`: the protocol bridge Node needs, since its `http` module is
+  callback-style and knows nothing of `Request`/`Response`. Buffers the incoming body into a
+  `Request`, then writes the `Response` back in the cheapest shape its body allows: a
+  single-chunk body (every REST response) goes out with `Content-Length` in **one write**; a body
+  whose first chunk isn't there by the next event-loop turn (an event stream) gets its headers
+  flushed at once and is then **streamed** chunk by chunk with backpressure — buffering it would
+  hang forever. The two are told apart by racing the first `read()` against a `setImmediate`
+  (`settled`), so no content-type sniffing. This one-write path is what took the bridge from
+  ~3/4 of a request's cost to a fraction of it (see `benchmarking/BASELINE.md`). Keeps
+  multiple `Set-Cookie` values apart via `headers.getSetCookie()` (the OIDC callback sets two), and
+  wires the client's disconnect (`res`'s "close") to the `Request`'s `AbortSignal`, which
+  Deno/Bun/Workers provide natively and Node does not. Published as the **subpath**
+  `@shuri/sdk/node`, deliberately not re-exported from `index.ts`, so importing `@shuri/sdk` on
+  Deno/Bun/Workers never pulls `node:http` in.
 
 `buildCollections`/`buildGlobals` are driven by **the consumer's own tuple, not `core.collections`**.
-With auth on, the core also holds `users`, `_sessions`, `_accounts` and `_oidc_credentials`; iterating
-it would put four keys on the runtime object that `AppCollections<T>` never declares. Those
+With auth on, the core also holds `users`, `_sessions`, `_accounts`, `_oidc_credentials`, `_clients`
+and `_client_tokens`; iterating it would put six keys on the runtime object that `AppCollections<T>`
+never declares. Those
 collections deliberately stay off `app.collections` anyway: `app.collections._sessions.insert(...)`
 would walk straight past every invariant a session has, and typed access goes through `app.auth`
-(`app.auth.oidcCredentials` for the OIDC one).
+(`app.auth.oidcCredentials` for the OIDC one, `app.auth.clients` for the M2M ones).
 
 `app.auth` is typed `A extends AuthConfig ? AuthApi : undefined`, with `A` naked so the conditional
 distributes: no `auth` gives `undefined`, an object literal gives `AuthApi`, and a variable typed
@@ -48,13 +83,22 @@ names the owner and suggests a rename plus a `relation` to `users` — rather th
 report an opaque duplicate slug. Renaming the auth slugs per host was rejected: `authCollections`
 would stop being a constant and lose the literal slugs `InferCollection` reads.
 
-This package re-exports `AuthConfig`, `AuthApi`, `AuthUser`, `AuthSession`, the provider helpers and
-the auth error classes, so a consumer never needs `@shuri/auth` as a direct dependency.
+This package re-exports `AuthConfig`, `AuthApi`, `AuthUser`, `AuthSession`, the client types, the
+provider helpers, the auth error classes and `ForbiddenError`, plus the `Access*` rule types from
+`@shuri/core`, so a consumer never needs `@shuri/auth` as a direct dependency.
 
-`app.collections.<slug>.subscribe(...)`/`app.globals.<slug>.subscribe(...)` and the `/events` route
-are two views of one `store.events` bus: a write through the SDK shows up on the HTTP stream and vice
-versa. The bus itself stays off `ShuriApp`, like `core`/`store` — the public surface is the per-slug
-`subscribe` and the route.
+**Reacting to writes is a hook, observing them is a client.** There is no in-process event bus and no
+`subscribe` on a store: a server-side reaction goes through the lifecycle hooks `@shuri/core`
+declares — on the schema (`hooks: { beforeChange: [...] }`, Payload style) or at runtime through
+`app.hooks.onCollection(slug | "*", name, fn)` / `app.hooks.onGlobal(...)` (PocketBase style), the
+schema's first. `app.hooks` is a thin typed facade over `store.hooks`: a hook on `"posts"` sees
+`doc`/`data` typed from that collection's fields, `"*"` sees the generic record. A schema-declared
+hook is typed over the generic record too, since a literal can't reference its own `fields`. Hooks
+run whichever surface the write came through, and one made over HTTP carries the `request` (and
+`principal`, with auth on) in `context`. The `/events` route is fed by those same `afterChange`/
+`afterDelete` hooks (`@shuri/api`'s `realtime/source.ts`), and `@shuri/client` is the package that
+consumes it from outside the process: `client.collections("posts").subscribe(...)` is where the old
+per-slug `subscribe` went.
 
 ## Role in the monorepo
 
