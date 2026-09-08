@@ -18,6 +18,18 @@
       "dependsOn": ["^build"],
       "cache": false,
       "persistent": true
+    },
+    "bench": {
+      "dependsOn": ["^build"],
+      "cache": false
+    },
+    "bench:local": {
+      "dependsOn": ["^build"],
+      "cache": false
+    },
+    "bench:micro": {
+      "dependsOn": ["^build"],
+      "cache": false
     }
   }
 }

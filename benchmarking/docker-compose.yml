@@ -1,0 +1,33 @@
+# The budget the numbers are about: one core, one gigabyte, no swap. The load generator runs on
+# the host against the published port; Mongo, when the profile is on, runs unconstrained — the
+# bench measures the lib over a database, not the database.
+services:
+  sut:
+    build:
+      context: ..
+      dockerfile: benchmarking/Dockerfile
+    cpus: "1"
+    mem_limit: 1g
+    memswap_limit: 1g
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    ports:
+      - "${BENCH_PORT:-3000}:3000"
+    environment:
+      BENCH_ADAPTER: ${BENCH_ADAPTER:-memory}
+      BENCH_AUTH: ${BENCH_AUTH:-off}
+      BENCH_POSTS: ${BENCH_POSTS:-10000}
+      BENCH_SESSIONS: ${BENCH_SESSIONS:-1000}
+      BENCH_MONGO_URL: mongodb://mongo:27017
+    depends_on:
+      mongo:
+        condition: service_started
+        required: false
+
+  mongo:
+    image: mongo:8
+    profiles: [mongo]
+    ports:
+      - "${BENCH_MONGO_PORT:-27017}:27017"

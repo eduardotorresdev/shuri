@@ -5,6 +5,9 @@
   "prettier": "@shuri/config/prettierrc.base.json",
   "scripts": {
     "build": "turbo run build",
+    "bench": "turbo run bench --filter=@shuri/benchmarking",
+    "bench:local": "turbo run bench:local --filter=@shuri/benchmarking",
+    "bench:micro": "turbo run bench:micro --filter=@shuri/benchmarking",
     "demo": "turbo run start --filter=@shuri/demo",
     "dev": "turbo run dev",
     "format": "prettier --write .",

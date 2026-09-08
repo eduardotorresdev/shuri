@@ -1,0 +1,30 @@
+{
+  "name": "@shuri/benchmarking",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "bench": "node src/run.ts --mode docker",
+    "bench:local": "node src/run.ts --mode local",
+    "bench:micro": "vitest bench --run",
+    "typecheck": "tsgo --noEmit -p tsconfig.json",
+    "lint": "oxlint",
+    "bench:reference": "node src/reference.ts --mode docker"
+  },
+  "dependencies": {
+    "@shuri/core": "workspace:*",
+    "@shuri/sdk": "workspace:*",
+    "@shuri/store": "workspace:*",
+    "@shuri/store-memory": "workspace:*",
+    "@shuri/store-mongo": "workspace:*",
+    "mongodb": "^7.6.0"
+  },
+  "devDependencies": {
+    "@shuri/config": "workspace:*",
+    "@types/autocannon": "^7.12.7",
+    "@types/node": "^22.13.1",
+    "autocannon": "^8.0.0",
+    "fastify": "^5.11.3",
+    "vitest": "^3.2.4"
+  }
+}
