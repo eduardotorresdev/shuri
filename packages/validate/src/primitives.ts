@@ -83,3 +83,15 @@ export function matches(pattern: RegExp, message: string): Validator<unknown> {
     if (!pattern.test(value)) ctx.addIssue(message);
   };
 }
+
+/**
+ * Reports an issue when the value isn't a function. What a function *returns* can only be checked
+ * when it runs; this validates what can be checked at declaration time (a hook, an access rule).
+ * @param [message] - The issue message reported when the value isn't a function.
+ * @returns A validator that fails when the value isn't a function.
+ */
+export function func(message = "must be a function"): Validator<unknown> {
+  return (value, ctx) => {
+    if (typeof value !== "function") ctx.addIssue(message);
+  };
+}

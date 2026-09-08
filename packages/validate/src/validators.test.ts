@@ -8,6 +8,7 @@ import {
   keyedArray,
   nonEmpty,
   object,
+  objectOf,
   oneOf,
   optional,
   record,
@@ -228,5 +229,45 @@ describe("formatIssue / formatIssues", () => {
       { path: "b", message: "worse" },
     ]);
     expect(message).toBe("Invalid schema:\n  - a: bad\n  - b: worse");
+  });
+});
+
+describe("objectOf", () => {
+  const validator = objectOf<{ list?: unknown; view?: unknown }>(
+    {
+      list: optional(
+        refine((value) => typeof value === "boolean", '"list" must be a boolean'),
+      ),
+    },
+    '"access" must be an object',
+    { unknownKeyMessage: (key) => `"${key}" is not an access operation` },
+  );
+
+  it("accepts a plain object whose declared fields pass", () => {
+    expect(validate({ list: true }, validator)).toEqual([]);
+  });
+
+  it("reports the message, and nothing else, for anything but a plain object", () => {
+    for (const value of [null, "yes", 1, [], undefined]) {
+      expect(validate(value, validator, "access")).toEqual([
+        { path: "access", message: '"access" must be an object' },
+      ]);
+    }
+  });
+
+  it("validates each declared field at its own path", () => {
+    expect(validate({ list: "yes" }, validator, "access")).toEqual([
+      { path: "access.list", message: '"list" must be a boolean' },
+    ]);
+  });
+
+  it("reports undeclared keys at their own path when asked to", () => {
+    expect(validate({ read: true }, validator, "access")).toEqual([
+      { path: "access.read", message: '"read" is not an access operation' },
+    ]);
+  });
+
+  it("ignores undeclared keys by default", () => {
+    expect(validate({ read: true }, objectOf({}))).toEqual([]);
   });
 });

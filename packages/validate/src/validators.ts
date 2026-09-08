@@ -141,6 +141,40 @@ export function record<T>(
   };
 }
 
+export interface ObjectOfOptions {
+  /** When set, reports this message (at the key's own path) for every key not declared in `fields`. */
+  unknownKeyMessage?: (key: string) => string;
+}
+
+/**
+ * Validates a value of unknown shape (untrusted input, a config literal, ...) as a plain object with
+ * the declared `fields`, like `object` validates a value already known to be one — the same pairing
+ * `arrayOf` forms with `array`. Reports `message` and skips field validation if it isn't a plain
+ * object; with `unknownKeyMessage`, also reports every key `fields` doesn't declare.
+ * @param fields - The validator for each declared field, keyed by field name.
+ * @param [message] - The issue message reported when the value isn't a plain object.
+ * @param [options] - Options controlling how undeclared keys are reported.
+ * @returns A validator that fails when the value isn't a plain object, else delegates to `object`.
+ */
+export function objectOf<T extends object>(
+  fields: { [K in keyof T]?: Validator<T[K]> },
+  message = "must be an object",
+  options: ObjectOfOptions = {},
+): Validator<unknown> {
+  return (value, ctx) => {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
+      ctx.addIssue(message);
+      return;
+    }
+    if (options.unknownKeyMessage) {
+      for (const key of Object.keys(value)) {
+        if (!(key in fields)) ctx.at(key).addIssue(options.unknownKeyMessage(key));
+      }
+    }
+    object<T>(fields)(value as T, ctx);
+  };
+}
+
 /**
  * Reports an issue when the array has no items.
  * @param [message] - The issue message reported when the array is empty.

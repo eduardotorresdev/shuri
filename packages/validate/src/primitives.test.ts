@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { boolean, matches, maxLength, minLength, number, string } from "./primitives.js";
+import {
+  boolean,
+  func,
+  matches,
+  maxLength,
+  minLength,
+  number,
+  string,
+} from "./primitives.js";
 import { all, validate } from "./validators.js";
 
 describe("string", () => {
@@ -101,5 +109,25 @@ describe("matches", () => {
     const validator = matches(/^[a-z]+$/g, "bad id");
     expect(validate("abc", validator, "value")).toEqual([]);
     expect(validate("abc", validator, "value")).toEqual([]);
+  });
+});
+
+describe("func", () => {
+  it("accepts any function, async and arrow ones included", () => {
+    expect(validate(() => true, func(), "value")).toEqual([]);
+    expect(validate(async () => {}, func(), "value")).toEqual([]);
+    expect(validate(function named() {}, func(), "value")).toEqual([]);
+  });
+
+  it.each([1, "fn", true, null, undefined, {}, []])("flags %p", (value) => {
+    expect(validate(value, func(), "value")).toEqual([
+      { path: "value", message: "must be a function" },
+    ]);
+  });
+
+  it("supports a custom message", () => {
+    expect(validate(1, func("bad hook"), "value")).toEqual([
+      { path: "value", message: "bad hook" },
+    ]);
   });
 });

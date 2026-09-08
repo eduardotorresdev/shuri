@@ -15,7 +15,7 @@ src/
   errors.ts              ValidationError (issues -> Error), formatIssue/formatIssues
   validators.ts           validate/assertValid + every combinator
   validators.test.ts       unit tests for each combinator
-  primitives.ts             type and length/pattern primitives (string, number, boolean, minLength, maxLength, matches)
+  primitives.ts             type and length/pattern primitives (string, number, boolean, func, minLength, maxLength, matches)
   primitives.test.ts         unit tests for each primitive
 ```
 
@@ -32,7 +32,8 @@ src/
   - primitives: `required`, `refine`, `optional`, `oneOf`, `all`
   - structural: `object` (fixed fields), `array`/`arrayOf` (by index), `record` (arbitrary keys),
     `keyedArray`/`unique` (dedupe by derived key), `nonEmpty`
-- **primitives.ts** — the type guards (`string`, `number` — which also rejects `NaN` —, `boolean`) and
+- **primitives.ts** — the type guards (`string`, `number` — which also rejects `NaN` —, `boolean`,
+  `func`) and
   the string checks (`minLength`, `maxLength`, `matches`), all over `unknown`. They live in their own
   file because `validators.ts` is already close to the 300-line ceiling. A length or pattern check
   leaves a non-string alone, so composing `all(string(), minLength(8))` reports one issue rather than
