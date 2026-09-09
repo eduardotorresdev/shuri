@@ -1,17 +1,19 @@
 # @shuri/sdk
 
 The facade tying schema (`@shuri/core`) + persistence adapter (`@shuri/store`) + HTTP handlers
-(`@shuri/api`) + authentication (`@shuri/auth`) into a single app via `create()`:
-`app.collections.<slug>`, `app.globals.<slug>`, `app.auth`, `app.hooks`, `app.schema`, `app.handler`. This is the
-package most consumers should import from directly.
+(`@shuri/api`) + plugins (`@shuri/better-auth`, `@shuri/ui`'s admin) into a single app via
+`create()`: `app.collections.<slug>`, `app.globals.<slug>`, `app.hooks`, `app.schema`,
+`app.handler`. This is the package most consumers should import from directly.
 
 ## Tree
 
 ```
 src/
-  index.ts                    re-exports create.js and sveltekit.js, plus the auth/core types
+  index.ts                    re-exports create.js, plugin.js and sveltekit.js, plus the api/core types
   create.ts                    create(), ShuriApp, CreateConfig, AppCollections/AppGlobals
   create.test.ts               unit tests for create()
+  plugin.ts                    ShuriPlugin/PluginContext, collectPluginCollections/Access/OpenApi
+  plugin.test.ts
   create.hooks.test.ts         unit tests for app.hooks
   sveltekit.ts                 toSvelteKitHandle(app): routes a SvelteKit Handle to app.handler
   sveltekit.test.ts
@@ -19,33 +21,32 @@ src/
   node.test.ts                 boots a real http.Server on port 0 and drives it with fetch
   test/
     handler.test.ts             integration test exercising app.handler end to end
-    auth.test.ts                 integration test for an app with auth turned on
-    access.test.ts               integration test: Where rules and a scoped client, end to end
+    handlers.test.ts             config.handlers and config.plugins: order, collections, principal
+    access.test.ts               integration test: Where rules over a plugin's principal, end to end
 ```
 
 ## What each part does
 
-- **create.ts** — `create({ collections, globals, adapter, auth?, api?, globalsApi?, realtime?, openapi? })`: 0. If `auth` is set, checks the consumer's slugs against the ones `@shuri/auth` reserves and merges
-  `authCollections` in ahead of them.
+- **create.ts** — `create({ collections, globals, adapter, handlers?, plugins?, api?, globalsApi?, realtime?, openapi? })`: 0. Collects every plugin's collections (`collectPluginCollections`), refusing a slug the app
+  already declares, and merges them in ahead of the consumer's own.
   1. Calls `createCore` (`@shuri/core`) to validate the declared schema.
   2. Calls `createStore` (`@shuri/store`) to bind that `Core` to `adapter`.
   3. Builds `app.collections`/`app.globals`: one typed `CollectionStore`/`GlobalStore` per declared
      slug, so `app.collections.posts.insert(...)` and `app.globals.site.get()` are typed from the
      schema with no manual typing.
-  4. If `auth` is set, calls `createAuth({ store, scopes, ...config.auth })` for `app.auth`, with
-     `scopes = derivedScopes(core.collections, core.globals)` — the `<slug>:<op>` universe a client
-     role expands against, which only the app knows.
-  5. Builds `app.hooks`, the typed facade over `store.hooks` (see below), and `app.schema`, the
+  4. Builds `app.hooks`, the typed facade over `store.hooks` (see below), and `app.schema`, the
      consumer's own `{ collections, globals }` — whose _type_ is what `@shuri/client` is instantiated
      from (`createClient<typeof app.schema>`), so the client never has to repeat the schema.
-  6. Builds `app.handler` by calling `createHandler` (`@shuri/api`), which composes the collections,
+  5. Builds `app.handler` by calling `createHandler` (`@shuri/api`), which composes the collections,
      globals, event stream and OpenAPI handlers — the ordering and the base-path forwarding live
-     there, so this package only forwards the per-handler options it was given. The auth handler goes
-     in through `options.handlers`, which prepends it, and `auth.principal` through `options.access`,
-     which is what turns the `access` rules of every collection and global on, and
-     `auth.openapi.paths`/`security` through `options.openapi`, so `/openapi.json` describes the auth
-     routes and the cookie/bearer/client-credentials schemes (a host's own `openapi` options win). **Without `auth`,
-     no `access` is passed and every route stays open**, exactly as before.
+     there, so this package only forwards the per-handler options it was given. `config.handlers`
+     go in first, then every plugin's handlers (resolved with the store), through `options.handlers`,
+     which prepends them; the one plugin declaring a `principal` goes in through `options.access`,
+     which is what turns the `access` rules of every collection and global on; and every plugin's
+     `openapi` (`paths`/`security`) through `options.openapi`, so `/openapi.json` describes the
+     plugin's routes and how requests authenticate (a host's own `openapi` options win). **Without a
+     principal-resolving plugin, no `access` is passed and every route stays open**, exactly as
+     before.
 
 - **sveltekit.ts** — `toSvelteKitHandle(app, { base })`: routing glue, not a protocol bridge.
   SvelteKit already hands the handler a `Request`, so requests under `base` (default `/api`) go to
@@ -66,26 +67,15 @@ src/
   Deno/Bun/Workers never pulls `node:http` in.
 
 `buildCollections`/`buildGlobals` are driven by **the consumer's own tuple, not `core.collections`**.
-With auth on, the core also holds `users`, `_sessions`, `_accounts`, `_oidc_credentials`, `_clients`
-and `_client_tokens`; iterating it would put six keys on the runtime object that `AppCollections<T>`
-never declares. Those
-collections deliberately stay off `app.collections` anyway: `app.collections._sessions.insert(...)`
-would walk straight past every invariant a session has, and typed access goes through `app.auth`
-(`app.auth.oidcCredentials` for the OIDC one, `app.auth.clients` for the M2M ones).
+With `@shuri/better-auth` on, the core also holds its `user`, `session`, `account` and
+`verification` tables; iterating it would put keys on the runtime object that `AppCollections<T>`
+never declares. Those collections deliberately stay off `app.collections` anyway:
+`app.collections.session.insert(...)` would walk straight past every invariant the plugin owning that
+table maintains, and administration goes through the plugin's own surface (`ba.sessionSource.users`).
 
-`app.auth` is typed `A extends AuthConfig ? AuthApi : undefined`, with `A` naked so the conditional
-distributes: no `auth` gives `undefined`, an object literal gives `AuthApi`, and a variable typed
-`AuthConfig | undefined` gives `AuthApi | undefined`. `A` must **not** be `const`.
-
-A consumer collection reusing `users`/`_sessions`/`_accounts`/`_oidc_credentials` throws
-`AuthSlugCollisionError`, which
-names the owner and suggests a rename plus a `relation` to `users` — rather than letting `createCore`
-report an opaque duplicate slug. Renaming the auth slugs per host was rejected: `authCollections`
-would stop being a constant and lose the literal slugs `InferCollection` reads.
-
-This package re-exports `AuthConfig`, `AuthApi`, `AuthUser`, `AuthSession`, the client types, the
-provider helpers, the auth error classes and `ForbiddenError`, plus the `Access*` rule types from
-`@shuri/core`, so a consumer never needs `@shuri/auth` as a direct dependency.
+This package re-exports `ForbiddenError`/`UnauthenticatedError` and the `PrincipalResolver`/
+`AccessOptions`/`FallingHandler` types from `@shuri/api`, plus the `Access*` rule types from
+`@shuri/core`, so a consumer writing rules or a plugin never needs those as direct dependencies.
 
 **Reacting to writes is a hook, observing them is a client.** There is no in-process event bus and no
 `subscribe` on a store: a server-side reaction goes through the lifecycle hooks `@shuri/core`
@@ -95,7 +85,7 @@ schema's first. `app.hooks` is a thin typed facade over `store.hooks`: a hook on
 `doc`/`data` typed from that collection's fields, `"*"` sees the generic record. A schema-declared
 hook is typed over the generic record too, since a literal can't reference its own `fields`. Hooks
 run whichever surface the write came through, and one made over HTTP carries the `request` (and
-`principal`, with auth on) in `context`. The `/events` route is fed by those same `afterChange`/
+`principal`, with an auth plugin on) in `context`. The `/events` route is fed by those same `afterChange`/
 `afterDelete` hooks (`@shuri/api`'s `realtime/source.ts`), and `@shuri/client` is the package that
 consumes it from outside the process: `client.collections("posts").subscribe(...)` is where the old
 per-slug `subscribe` went.
@@ -106,33 +96,42 @@ The single entry point meant for end users of the toolkit (`@shuri/demo` is the 
 Everything below it (`core`, `store`, `api`) is composable on its own, but `sdk` is what wires them
 together with sensible defaults.
 
-`config.handlers` is how a surface outside that core arrives: it is forwarded to `@shuri/api`'s
-`createHandler`, which runs each one ahead of every built-in route — but still after nothing, and
-crucially _before_ auth's own, so a guard passed there really does guard them while login and signup
-remain reachable. `@shuri/ui`'s admin mounts this way, which is why this package does not depend on
-it: an app that wants no admin pays nothing for it.
+`config.handlers` is how a plain handler outside that core arrives: it is forwarded to `@shuri/api`'s
+`createHandler`, which runs each one ahead of every built-in route — and ahead of every plugin's own,
+so a guard passed there really does guard them while login and signup remain reachable.
 
-It also accepts a **function** of a `HandlerContext`, for a handler that needs something `create()`
-builds. Today that is the `AuthApi`, which cannot be passed in from outside because it needs the
-store, which needs the core:
+`config.plugins` is for the case `handlers` cannot serve: something whose persistence lives in the
+app's own store, or that identifies who is asking. A `ShuriPlugin` contributes **collections** (in
+the schema _before_ the store is built), **handlers** (resolved with that store _once it is_ — a
+circle only `create()` can close, since it builds both), a **principal** resolver (at most one plugin
+may; two throw `PluginPrincipalConflictError`) and its **openapi** description. `@shuri/better-auth`
+is exactly that shape, and `@shuri/ui`'s admin mounts as a plugin beside it so it can be handed the
+session source in the same `create()` call. Plugin collections are merged into the schema but kept
+off `app.collections`: reaching past the package that owns a table walks straight past its
+invariants. A slug already claimed fails with `PluginSlugCollisionError`, which names the plugin that
+brought it — the one thing a host needs in order to fix it.
 
 ```ts
-handlers: ({ auth }) => [
-  createAdminHandler({ collections, globals }, { auth: { auth } }),
-];
+const ba = betterAuthPlugin({ options: { emailAndPassword: { enabled: true } } });
+
+const app = create({
+  collections,
+  globals,
+  adapter,
+  plugins: [
+    ba,
+    {
+      name: "admin",
+      handlers: () => [
+        createAdminHandler(
+          { collections, globals },
+          { auth: { auth: ba.sessionSource, basePath: ba.basePath } },
+        ),
+      ],
+    },
+  ],
+});
 ```
 
-An array and a function tell themselves apart at runtime, so both forms go in the same option with no
-wrapper. `HandlerContext` is an object rather than the `AuthApi` alone so the next thing a handler
-needs is not a breaking change for every host.
-
-`config.plugins` goes one step further, for the case `handlers` cannot serve: something whose
-persistence lives in the app's own store. Its collections must be in the schema _before_ the store is
-built and its handlers need that store _once it is_ — a circle only `create()` can close, since it
-builds both. `@shuri/better-auth` is exactly that shape. Plugin collections are merged into the
-schema but kept off `app.collections`, for the same reason auth's are: reaching past the package that
-owns a table walks straight past its invariants. A slug already claimed fails with
-`PluginSlugCollisionError`, which names the plugin that brought it — the one thing a host needs in
-order to fix it.
-
-Use `handlers` when a plain handler is all you have, `plugins` when collections are involved.
+This package does not depend on `@shuri/ui` or `@shuri/better-auth`: both arrive through `plugins`,
+so an app that wants neither pays nothing for them.

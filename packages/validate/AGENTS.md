@@ -38,8 +38,8 @@ src/
   file because `validators.ts` is already close to the 300-line ceiling. A length or pattern check
   leaves a non-string alone, so composing `all(string(), minLength(8))` reports one issue rather than
   two for the same cause; `matches` resets `lastIndex`, so a `/g` pattern can't alternate between
-  calls. Added for `@shuri/core`'s `hidden`/`internal` flags and `@shuri/auth`'s config, credential
-  and hash-format validation, all of which would otherwise be loose `typeof` checks.
+  calls. Added for `@shuri/core`'s `hidden`/`internal` flags and `@shuri/ui`'s setup and user bodies,
+  all of which would otherwise be loose `typeof` checks.
 
 ## Role in the monorepo
 

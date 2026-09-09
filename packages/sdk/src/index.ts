@@ -1,41 +1,13 @@
 export * from "./create.js";
 export * from "./plugin.js";
 export * from "./sveltekit.js";
-export type {
-  AuthApi,
-  AuthClient,
-  AuthConfig,
-  AuthSession,
-  AuthUser,
-  ClientsConfig,
-  IssuedClient,
-  IssuedClientToken,
-  IssuedSession,
-  OidcProviderConfig,
-  SessionMetadata,
-} from "@shuri/auth";
 export {
-  AccountLinkRefusedError,
-  AuthConfigError,
-  AuthenticationFailedError,
-  AuthSlugCollisionError,
-  ClientsConfigError,
-  EmailAlreadyRegisteredError,
-  InvalidCredentialsError,
-  InvalidScopeError,
-  MissingEmailClaimError,
-  OAuthTransactionError,
-  OidcProviderError,
+  ForbiddenError,
   UnauthenticatedError,
-  UnknownClientError,
-  UnknownProviderError,
-  UnknownRoleError,
-  UnsupportedMediaTypeError,
-  googleProvider,
-  oidcProvider,
-  usersCollection,
-} from "@shuri/auth";
-export { ForbiddenError } from "@shuri/api";
+  type AccessOptions,
+  type FallingHandler,
+  type PrincipalResolver,
+} from "@shuri/api";
 export type {
   AccessClient,
   AccessContext,

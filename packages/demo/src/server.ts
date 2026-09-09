@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { betterAuthPlugin } from "@shuri/better-auth";
 import { createClient } from "@shuri/client";
 import { create } from "@shuri/sdk";
 import { toNodeListener } from "@shuri/sdk/node";
@@ -10,34 +11,63 @@ import { runAuthWalkthrough, type DemoClient } from "./auth-walkthrough.ts";
 
 const port = Number(process.env["PORT"] ?? 3000);
 
-// The credentials the seeded admin user signs in with. Hard-coded because this demo throws its
+// The credentials the seeded administrator signs in with. Hard-coded because this demo throws its
 // whole store away on exit; a real app would never carry a password in source.
 const ADMIN_EMAIL = "admin@example.com";
 const ADMIN_PASSWORD = "correct horse battery staple";
 
-// `cookie.secure: false` because this demo is plain HTTP: a Secure cookie is never stored by a
-// browser talking to http://localhost, so the whole flow would silently do nothing. `clients.roles`
-// is what a machine client's token can be scoped to: `posts:*` expands to every op of `posts`.
-//
-// `handlers` is a function so the admin can be handed the `AuthApi` this very call builds — it
-// cannot exist beforehand, since it needs the store.
-//
-// `authorize` is what makes the admin an admin. Signup here is open, so without it every visitor
-// who registers would be an editor. It matches on email because `@shuri/auth`'s `users` collection
-// declares no role field; a real app adds one and checks that instead.
+// `SHURI_SETUP_TOKEN` gates the first-run form — set it and the form asks for it too. The demo seeds
+// an administrator below, so the form only appears if that seed is removed.
+const setupToken = process.env["SHURI_SETUP_TOKEN"];
+
+const ba = betterAuthPlugin({
+  options: {
+    baseURL: `http://localhost:${port}`,
+    // Hard-coded because this demo throws its whole store away on exit.
+    secret: "demo-secret-at-least-32-characters-long",
+    emailAndPassword: { enabled: true },
+    // Declared to better-auth, not only stamped on the row: better-auth parses a user against its
+    // own schema on the way out, so a column it does not know about never reaches a session — and
+    // `authorize` below would never see it. Declaring it here also puts it on the collection
+    // `betterAuthCollections` derives.
+    user: {
+      additionalFields: { role: { type: "string", required: false, input: false } },
+    },
+    // Plain HTTP: a Secure cookie is never stored by a browser talking to http://localhost.
+    advanced: { useSecureCookies: false },
+  },
+  // Whoever completes setup becomes the administrator; `authorize` reads exactly this back.
+  setup: { fields: { role: "admin" } },
+});
+
+// `authorize` is what makes the admin an admin. Signup is open, so without it every visitor who
+// registers would be an editor. Reads stay public (`@shuri/ui`'s default) and writes to
+// `/collections` and `/globals` take that session.
 const app = create({
   collections,
   globals,
   adapter: createMemoryAdapter(),
-  auth: {
-    cookie: { secure: false },
-    clients: { roles: { integrator: ["posts:*"] } },
-  },
-  handlers: ({ auth }) => [
-    createAdminHandler(
-      { collections, globals },
-      { auth: { auth, authorize: (session) => session.user.email === ADMIN_EMAIL } },
-    ),
+  plugins: [
+    ba,
+    {
+      name: "admin",
+      handlers: () => [
+        createAdminHandler(
+          { collections, globals },
+          {
+            auth: {
+              auth: ba.sessionSource,
+              basePath: ba.basePath,
+              authorize: (session) => session.user["role"] === "admin",
+              setup: {
+                source: ba.setupSource,
+                ...(setupToken ? { token: setupToken } : {}),
+              },
+            },
+          },
+        ),
+      ],
+    },
   ],
 });
 
@@ -67,9 +97,14 @@ await app.collections.posts.insert({
   readingMinutes: 3,
   published: true,
 });
-// The one account that passes `authorize` above. Created through `auth.signUp` rather than by
-// inserting into `users`, so the password goes through the same hasher a real signup does.
-await app.auth.signUp({ email: ADMIN_EMAIL, password: ADMIN_PASSWORD });
+// The one account that passes `authorize` above, created by completing the first-run flow on the
+// boot's behalf: the same route the setup form posts to, so the password goes through better-auth's
+// hasher and `role: "admin"` is stamped exactly as it would be for whoever filled the form in.
+const setup = await ba.setupSource.create(
+  { email: ADMIN_EMAIL, password: ADMIN_PASSWORD, name: "Admin" },
+  new Request(`http://localhost:${port}/admin/setup`),
+);
+if (!setup.ok) throw new Error(`seeding the administrator failed: ${setup.status}`);
 
 await app.globals.site.update({
   name: "Shuri Demo",
@@ -83,6 +118,8 @@ createServer(toNodeListener(app)).listen(port);
 console.log(`Shuri demo running at http://localhost:${port}`);
 console.log(`  Admin UI:    http://localhost:${port}/admin`);
 console.log(`               entre com ${ADMIN_EMAIL} / ${ADMIN_PASSWORD}`);
+if (setupToken) console.log(`               token de setup: ${setupToken}`);
+console.log(`  Auth routes: http://localhost:${port}${ba.basePath}/*`);
 console.log(`  Collections: http://localhost:${port}/collections/posts`);
 console.log(`  Globals:     http://localhost:${port}/globals/site`);
 console.log(`  OpenAPI doc: http://localhost:${port}/openapi.json`);

@@ -12,6 +12,9 @@ const collections = [
     title: "Posts",
     singular: "Post",
     plural: "Posts",
+    // Public reads, declared: with the plugin resolving a principal, an op with no rule needs a
+    // signed-in one.
+    access: { list: () => true, view: () => true },
     fields: [{ type: "text", name: "title", required: true }],
   },
 ] as const satisfies readonly CollectionSchema[];
@@ -20,10 +23,8 @@ const ADMIN = { email: "admin@example.com", password: "correct horse battery sta
 const OTHER = { email: "rando@example.com", password: "correct horse battery staple" };
 
 /**
- * Builds an app whose admin is guarded by better-auth rather than `@shuri/auth`.
- *
- * The point of the test: `createAdminHandler` is called exactly as it is with `@shuri/auth`. Only
- * the session source and the two credential paths differ, and both come off the plugin.
+ * Builds an app whose admin is guarded by better-auth: the session source and the credential
+ * paths both come off the plugin, and `createAdminHandler` needs nothing else.
  * @returns The app and the plugin backing it.
  */
 function createApp() {
@@ -50,8 +51,6 @@ function createApp() {
               auth: {
                 auth: ba.sessionSource,
                 basePath: ba.basePath,
-                signInPath: `${ba.basePath}/sign-in/email`,
-                signOutPath: `${ba.basePath}/sign-out`,
                 authorize: (session) => session.user.email === ADMIN.email,
               },
             },
@@ -179,7 +178,7 @@ describe("the admin, guarded by better-auth", () => {
     expect(response.status).toBe(403);
   });
 
-  it("keeps reads public, as it does with @shuri/auth", async () => {
+  it("keeps reads public, which is the admin's default", async () => {
     const { app } = createApp();
 
     const response = await app.handler(new Request("http://localhost/collections/posts"));

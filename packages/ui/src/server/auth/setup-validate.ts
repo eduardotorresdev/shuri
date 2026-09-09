@@ -12,8 +12,8 @@ import {
 import type { AdminSetupCredentials } from "./setup-types.js";
 
 /**
- * The shortest password setup accepts. Matches `@shuri/auth`'s own floor, so an account created here
- * can always be signed back in through it.
+ * The shortest password setup and the users routes accept. Matches better-auth's default
+ * `minPasswordLength`, so an account created here can always be signed back in through it.
  */
 export const MIN_PASSWORD_LENGTH = 8;
 

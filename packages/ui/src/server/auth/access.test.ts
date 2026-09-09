@@ -13,9 +13,9 @@ const get = (token?: string) => asUser(token, new Request("http://x/collections/
 describe("resolveAdminAuth", () => {
   it("advertises the auth defaults", async () => {
     expect(await resolveAdminAuth({ auth }, api).advertised()).toEqual({
-      basePath: "/auth",
-      signIn: "/auth/login",
-      signOut: "/auth/logout",
+      basePath: "/api/auth",
+      signIn: "/api/auth/sign-in/email",
+      signOut: "/api/auth/sign-out",
       providers: [],
     });
   });
@@ -28,8 +28,8 @@ describe("resolveAdminAuth", () => {
 
     expect(await resolved.advertised()).toEqual({
       basePath: "/session",
-      signIn: "/session/login",
-      signOut: "/session/logout",
+      signIn: "/session/sign-in/email",
+      signOut: "/session/sign-out",
       providers: ["google"],
     });
   });

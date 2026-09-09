@@ -2,8 +2,8 @@ import { ApiError } from "../errors.js";
 
 /**
  * No usable principal on the request — no cookie, no bearer, or one that no longer resolves — and
- * the operation isn't open to anonymous callers. Declared here rather than in `@shuri/auth` because
- * the guards in this folder throw it; auth re-exports it under the same name.
+ * the operation isn't open to anonymous callers. Declared here because the guards in this folder
+ * throw it; `@shuri/ui`'s admin throws the same one from its own gate.
  */
 export class UnauthenticatedError extends ApiError {
   constructor() {

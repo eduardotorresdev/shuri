@@ -37,9 +37,12 @@ export interface CreateAdminHandlerOptions {
    * Puts the admin behind a login. Omitting it leaves the admin — and the REST routes — exactly as
    * open as they were.
    *
-   * Needs the `AuthApi` that `create()` builds, so pass `handlers` as a function to receive it:
+   * Takes the auth plugin's session source, so mount the admin as a plugin beside it — the source is
+   * bound by the same `create()` call:
    *
-   *   handlers: ({ auth }) => [createAdminHandler({ collections, globals }, { auth: { auth } })]
+   *   plugins: [ba, { name: "admin", handlers: () => [
+   *     createAdminHandler({ collections, globals }, { auth: { auth: ba.sessionSource } }),
+   *   ] }]
    */
   auth?: AdminAuthOptions;
 }

@@ -2,7 +2,7 @@
   "extends": ["../config/oxlintrc.base.json"],
   "overrides": [
     {
-      "files": ["src/server.ts", "src/better-auth-server.ts", "src/auth-walkthrough.ts", "src/collections.ts"],
+      "files": ["src/server.ts", "src/auth-walkthrough.ts", "src/collections.ts"],
       "rules": {
         "no-console": "off"
       }

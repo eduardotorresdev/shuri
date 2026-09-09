@@ -1,3 +1,4 @@
+import { betterAuthPlugin } from "@shuri/better-auth";
 import { create } from "@shuri/sdk";
 import { createMemoryAdapter } from "@shuri/store-memory";
 import { createClient, type ClientConfig } from "../create.js";
@@ -49,10 +50,18 @@ export function createTestApp(
     realtime: { heartbeatMs: 0 },
     ...(options.auth
       ? {
-          auth: {
-            cookie: { secure: false },
-            clients: { roles: { reader: ["posts:*"] } },
-          },
+          plugins: [
+            betterAuthPlugin({
+              options: {
+                baseURL: "http://localhost",
+                secret: "test-secret-at-least-32-characters-long",
+                emailAndPassword: { enabled: true },
+                // Off under NODE_ENV=test by default, which would hide a client that sends no
+                // Origin: the demo boot is where that surfaced.
+                advanced: { disableOriginCheck: false },
+              },
+            }),
+          ],
         }
       : {}),
   });

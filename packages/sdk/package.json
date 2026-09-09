@@ -23,7 +23,6 @@
   },
   "dependencies": {
     "@shuri/api": "workspace:*",
-    "@shuri/auth": "workspace:*",
     "@shuri/core": "workspace:*",
     "@shuri/store": "workspace:*"
   },

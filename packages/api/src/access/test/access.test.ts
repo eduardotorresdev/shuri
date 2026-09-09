@@ -14,7 +14,7 @@ import { readEvents } from "../../realtime/test-support.js";
 /**
  * The access policy end to end, through the composed handler over a real store: anonymous, a
  * signed-in user, and a client with scopes, against collections with and without rules. The
- * principal comes off a fake `x-principal` header, so this stays independent of `@shuri/auth`.
+ * principal comes off a fake `x-principal` header, so this stays independent of any auth plugin.
  */
 const collections: CollectionSchema[] = [];
 const globals: GlobalSchema[] = [];

@@ -6,8 +6,7 @@
   "scripts": {
     "start": "node --watch src/server.ts",
     "typecheck": "tsgo --noEmit -p tsconfig.json",
-    "lint": "oxlint",
-    "start:better-auth": "node --watch src/better-auth-server.ts"
+    "lint": "oxlint"
   },
   "dependencies": {
     "@shuri/client": "workspace:*",

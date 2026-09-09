@@ -12,6 +12,18 @@ const SECRET_FIELDS: ReadonlySet<string> = new Set([
   "value",
 ]);
 
+/**
+ * Fields better-auth looks a row up by on a hot path — a session by its token on every request, a
+ * user by email on every sign-in — declared `index: true` so the store answers them in O(1) rather
+ * than scanning the table.
+ */
+const INDEXED_FIELDS: ReadonlySet<string> = new Set([
+  "token",
+  "email",
+  "userId",
+  "identifier",
+]);
+
 /** One entry of better-auth's own schema description, narrowed to what this file reads. */
 interface BetterAuthField {
   type: unknown;
@@ -37,7 +49,13 @@ interface BetterAuthField {
 function toField(name: string, field: BetterAuthField): Field {
   const required = field.required === true;
   const hidden = SECRET_FIELDS.has(name);
-  const base = { name, ...(required ? { required } : {}), ...(hidden ? { hidden } : {}) };
+  const index = INDEXED_FIELDS.has(name);
+  const base = {
+    name,
+    ...(required ? { required } : {}),
+    ...(hidden ? { hidden } : {}),
+    ...(index ? { index } : {}),
+  };
 
   if (field.references) {
     return { ...base, type: "relation", collection: field.references.model };

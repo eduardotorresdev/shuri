@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { performance } from "node:perf_hooks";
+import { betterAuthPlugin } from "@shuri/better-auth";
 import { create } from "@shuri/sdk";
 import { toNodeListener } from "@shuri/sdk/node";
 import type { StoreAdapter } from "@shuri/store";
@@ -13,7 +14,7 @@ import { collections, globals } from "./schema.ts";
  * The system under test: a `@shuri/sdk` app served through `@shuri/sdk/node`, exactly as a
  * consumer would run it, plus two support routes outside the lib's handler chain:
  *
- *   GET /__bench/fixtures   ids, session cookie, client token, login credentials
+ *   GET /__bench/fixtures   ids, session cookie, login credentials
  *   GET /__bench/stats      process.memoryUsage() + event loop utilization
  *
  * Configured by environment only, so the same file boots in Docker and as a local child process:
@@ -44,21 +45,25 @@ async function buildAdapter(): Promise<StoreAdapter> {
 }
 
 const startedAt = performance.now();
+// Plain HTTP inside the container, so the cookie must not be `Secure` or autocannon never sends it.
+const auth = authOn
+  ? betterAuthPlugin({
+      options: {
+        baseURL: `http://localhost:${port}`,
+        secret: "bench-secret-at-least-32-characters-long",
+        emailAndPassword: { enabled: true },
+        advanced: { useSecureCookies: false },
+      },
+    })
+  : undefined;
 const app = create({
   collections,
   globals,
   adapter: await buildAdapter(),
-  ...(authOn
-    ? {
-        auth: {
-          cookie: { secure: false },
-          clients: { roles: { integrator: ["posts:*"] } },
-        },
-      }
-    : {}),
+  ...(auth ? { plugins: [auth] } : {}),
 });
 
-const fixtures: Fixtures = await seed(app, { posts, sessions });
+const fixtures: Fixtures = await seed(app, { posts, sessions, auth });
 const fixturesBody = JSON.stringify(fixtures);
 const seededIn = Math.round(performance.now() - startedAt);
 

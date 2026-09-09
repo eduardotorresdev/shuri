@@ -19,11 +19,11 @@ describe("toClientError", () => {
     });
   });
 
-  it("prefers an OAuth error_description, and falls back for a non-JSON body", async () => {
+  it("reads better-auth's message, and falls back for a non-JSON body", async () => {
     expect(
       await toClientError(
         new Response(
-          JSON.stringify({ error: "invalid_request", error_description: "Bad" }),
+          JSON.stringify({ code: "INVALID_EMAIL_OR_PASSWORD", message: "Bad" }),
           {
             status: 400,
           },

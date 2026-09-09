@@ -32,9 +32,9 @@ export interface AdminCollection {
  * in.
  *
  * The two credential paths are carried in full rather than derived from `basePath`, because the
- * admin is not tied to one auth implementation: `@shuri/auth` serves `/auth/login` and
- * `/auth/logout`, `@shuri/better-auth` serves `/api/auth/sign-in/email` and `/api/auth/sign-out`.
- * Whoever mounts the admin says which.
+ * admin is not tied to one auth implementation: `@shuri/better-auth` serves `/api/auth/sign-in/email`
+ * and `/api/auth/sign-out`, a host's own scheme may serve anything. Whoever mounts the admin says
+ * which.
  */
 export interface AdminAuth {
   /** Prefix the auth routes are mounted under, e.g. `/auth`. Used to build the OIDC start URLs. */
@@ -87,7 +87,7 @@ export interface AdminUsers {
   passwordMinLength: number;
 }
 
-/** The signed-in user, as the admin's header shows them. A projection of `@shuri/auth`'s `AuthUser`. */
+/** The signed-in user, as the admin's header shows them. A projection of `AdminSessionUser`. */
 export interface AdminUser {
   id: string;
   email: string;
@@ -99,8 +99,8 @@ export interface AdminUser {
  * `user` plus an `authorized` flag, so "signed in but refused" cannot be confused with either
  * neighbour and the admin's screens switch on a single value.
  *
- * `forbidden` is authenticated but turned away by the host's `authorize`: `@shuri/auth` has no roles
- * of its own, so who counts as an editor is a question only the host can answer.
+ * `forbidden` is authenticated but turned away by the host's `authorize`: who counts as an editor is
+ * a question only the host can answer.
  */
 export type AdminViewer =
   /** The app has no account at all yet: the admin shows the first-account form, not the login one. */

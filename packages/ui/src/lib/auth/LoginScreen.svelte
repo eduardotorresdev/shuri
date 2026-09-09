@@ -27,6 +27,19 @@
   let submitting = $state(false);
   let error = $state<unknown>(undefined);
 
+  async function handleSocial(provider: string): Promise<void> {
+    submitting = true;
+    error = undefined;
+    try {
+      // A social sign-in is a full-page round trip to another origin, which XHR cannot follow:
+      // the route answers with the URL and the browser goes there.
+      window.location.assign(await client.signInSocial(provider, returnTo));
+    } catch (caught) {
+      error = caught;
+      submitting = false;
+    }
+  }
+
   async function handleSubmit(event: SubmitEvent): Promise<void> {
     event.preventDefault();
     submitting = true;
@@ -90,13 +103,14 @@
     <div class="divider"><span>ou</span></div>
     <div class="providers">
       {#each auth.providers as provider (provider)}
-        <!--
-          A real link, not a fetch: an OIDC sign-in is a full-page round trip to another origin,
-          which XHR cannot follow.
-        -->
-        <a class="provider" href={client.oidcUrl(provider, returnTo)}>
+        <button
+          class="provider"
+          type="button"
+          disabled={submitting}
+          onclick={() => handleSocial(provider)}
+        >
           Continuar com {provider}
-        </a>
+        </button>
       {/each}
     </div>
   {/if}
@@ -142,6 +156,9 @@
   }
 
   .provider {
+    cursor: pointer;
+    background: var(--shuri-surface);
+    font: inherit;
     padding: 11px 12px;
     font-size: 14px;
     font-weight: 600;

@@ -1,12 +1,11 @@
-import type { AuthUser } from "@shuri/auth";
 import { describe, expect, it } from "vitest";
+import type { AdminSessionUser } from "./types.js";
 import { toAdminUser } from "./user.js";
 
-const user: AuthUser = {
+const user: AdminSessionUser = {
   id: "u1",
   email: "ada@example.com",
   name: "Ada",
-  createdAt: 0,
   passwordHash: "never-leaves",
   internalNote: "nor this",
 };
@@ -26,7 +25,7 @@ describe("toAdminUser", () => {
   });
 
   it("leaves `name` out rather than sending it undefined", () => {
-    const nameless: AuthUser = { id: "u2", email: "b@c.com", createdAt: 0 };
+    const nameless: AdminSessionUser = { id: "u2", email: "b@c.com" };
 
     expect(Object.keys(toAdminUser(nameless))).toEqual(["id", "email"]);
   });

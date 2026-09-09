@@ -118,7 +118,7 @@ src/
   fields). A collection's `id` is `readOnly`, since the store generates it and rejects a payload
   carrying one. The event union stays out of `components.schemas` on purpose: its keys are raw user
   slugs, so any added name could collide with one. Two options let another package complete the
-  document: `paths` (extra path items, merged last — `@shuri/auth`'s routes) and `security` (the
+  document: `paths` (extra path items, merged last — an auth plugin's routes) and `security` (the
   `components.securitySchemes` plus a `requirements(scope)` every operation is stamped with, carrying
   its own `<slug>:<op>` scope; the event stream gets one without a scope, since it is gated per
   event). Both absent, the document describes an open API, exactly as before.
@@ -184,14 +184,15 @@ src/
     produces, so a client may send it too.
 - **falling.ts** — `FallingHandler`, in its own leaf module because `handler.ts` imports
   `globals/handler.ts`: a package that needs the type but must not be imported _by_ `createHandler`
-  (`@shuri/auth`) takes it from here with no cycle. `CreateHandlerOptions.handlers` are **prepended**
+  (`@shuri/ui`, `@shuri/better-auth`) takes it from here with no cycle. `CreateHandlerOptions.handlers` are **prepended**
   to the chain: every built-in handler is relocatable through its own `basePath`, so a collision is
   the consumer's to resolve, while a guard is only a guard if it runs first.
 - **utils/response.ts#toErrorResponse** — the single place that maps known errors (from
   `@shuri/store` and this package) to HTTP status codes; unrecognized errors are rethrown to surface
   as a 500 (or crash) at the hosting engine's own error boundary. It branches on `IssuesApiError` /
-  `ApiError` — inheritance, not a registry of concrete classes — which is why `@shuri/auth` can add a
-  dozen errors without this file changing, and why the import edge stays `auth -> api`.
+  `ApiError` — inheritance, not a registry of concrete classes — which is why `@shuri/ui` and
+  `@shuri/better-auth` can add their own errors without this file changing, and why the import edge
+  stays `plugin -> api`.
 
 ## Role in the monorepo
 

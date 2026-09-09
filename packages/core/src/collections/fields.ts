@@ -14,7 +14,7 @@ export interface FieldBase {
    * Asks the adapter to index the field for equality lookups (`where: { field: { op: "eq" } }`).
    * Without it a lookup by value is a scan of the whole collection, in every adapter: the memory
    * adapter copies and filters the table, Mongo walks the collection. Declare it on any field a
-   * hot path looks up by — `@shuri/auth` does on `_sessions.tokenHash`. A hint, not a constraint:
+   * hot path looks up by — a session token, an email. A hint, not a constraint:
    * uniqueness is still the caller's job.
    */
   index?: boolean;

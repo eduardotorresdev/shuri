@@ -4,9 +4,9 @@ import { AdminRequestError } from "./errors.js";
 import type { AdminAuth } from "./schema.js";
 
 const auth: AdminAuth = {
-  basePath: "/auth",
-  signIn: "/auth/login",
-  signOut: "/auth/logout",
+  basePath: "/api/auth",
+  signIn: "/api/auth/sign-in/email",
+  signOut: "/api/auth/sign-out",
   providers: ["google"],
 };
 
@@ -33,7 +33,7 @@ describe("createAdminAuthClient", () => {
       password: "hunter2",
     });
 
-    expect(calls[0]?.url).toBe("/auth/login");
+    expect(calls[0]?.url).toBe("/api/auth/sign-in/email");
     expect(calls[0]?.init?.method).toBe("POST");
     expect(calls[0]?.init?.body).toBe('{"email":"ada@example.com","password":"hunter2"}');
   });
@@ -41,12 +41,12 @@ describe("createAdminAuthClient", () => {
   it("posts wherever the schema says, so it speaks to any auth implementation", async () => {
     const { calls, fetch } = stubFetch([new Response(null, { status: 200 })]);
 
-    await createAdminAuthClient(
-      { ...auth, signIn: "/api/auth/sign-in/email" },
-      { fetch },
-    ).signIn({ email: "a@b.com", password: "x" });
+    await createAdminAuthClient({ ...auth, signIn: "/auth/login" }, { fetch }).signIn({
+      email: "a@b.com",
+      password: "x",
+    });
 
-    expect(calls[0]?.url).toBe("/api/auth/sign-in/email");
+    expect(calls[0]?.url).toBe("/auth/login");
   });
 
   it("raises the server's message on a rejected sign-in", async () => {
@@ -79,7 +79,7 @@ describe("createAdminAuthClient", () => {
 
     await createAdminAuthClient(auth, { fetch }).signOut();
 
-    expect(calls[0]?.url).toBe("/auth/logout");
+    expect(calls[0]?.url).toBe("/api/auth/sign-out");
     expect(calls[0]?.init?.method).toBe("POST");
   });
 
@@ -91,16 +91,38 @@ describe("createAdminAuthClient", () => {
     expect(calls[0]?.init?.headers).toBeUndefined();
   });
 
-  it("builds an OIDC start URL that comes back to the admin", () => {
-    const url = createAdminAuthClient(auth).oidcUrl("google", "/admin");
+  it("starts a social sign-in and hands back the URL to navigate to", async () => {
+    const { calls, fetch } = stubFetch([
+      new Response(
+        JSON.stringify({ url: "https://accounts.google.com/o/oauth2?x", redirect: true }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      ),
+    ]);
 
-    expect(url).toBe("/auth/oidc/google?redirectTo=%2Fadmin");
+    const url = await createAdminAuthClient(auth, { fetch }).signInSocial(
+      "google",
+      "/admin",
+    );
+
+    expect(url).toBe("https://accounts.google.com/o/oauth2?x");
+    expect(calls[0]?.url).toBe("/api/auth/sign-in/social");
+    expect(calls[0]?.init?.body).toBe('{"provider":"google","callbackURL":"/admin"}');
   });
 
-  it("escapes a provider id and a return path rather than splicing them in", () => {
-    const url = createAdminAuthClient(auth).oidcUrl("a/b", "/admin?x=1&y=2");
+  it("refuses a social sign-in that answered without a URL", async () => {
+    const { fetch } = stubFetch([
+      new Response("{}", {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    ]);
 
-    expect(url).toBe("/auth/oidc/a%2Fb?redirectTo=%2Fadmin%3Fx%3D1%26y%3D2");
+    await expect(
+      createAdminAuthClient(auth, { fetch }).signInSocial("google", "/admin"),
+    ).rejects.toThrow("Sign-in returned no URL");
   });
 
   it("prefixes the origin when the admin is embedded elsewhere", async () => {
@@ -114,7 +136,7 @@ describe("createAdminAuthClient", () => {
       password: "x",
     });
 
-    expect(calls[0]?.url).toBe("https://cms.example.com/auth/login");
+    expect(calls[0]?.url).toBe("https://cms.example.com/api/auth/sign-in/email");
   });
 });
 
@@ -128,11 +150,11 @@ describe("signInErrorMessage", () => {
   it("hides the internal field path a shape check reports", () => {
     const tooShort = new AdminRequestError(
       400,
-      'body.password: "password" must be at least 8 characters',
+      'password: "password" must be at least 8 characters',
     );
 
     expect(signInErrorMessage(tooShort)).toBe(SIGN_IN_REFUSED);
-    expect(signInErrorMessage(tooShort)).not.toContain("body.password");
+    expect(signInErrorMessage(tooShort)).not.toContain("password");
   });
 
   it("lets a real failure keep its own message, so it isn't mistaken for a typo", () => {

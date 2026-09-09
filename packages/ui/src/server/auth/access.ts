@@ -1,8 +1,7 @@
-import type { AuthSession } from "@shuri/auth";
 import type { AdminApiPaths, AdminAuth, AdminViewer } from "../../shared/schema.js";
 import { writesToApi } from "./protect.js";
 import { resolveAdminSetup, type ResolvedAdminSetup } from "./setup.js";
-import type { AdminAuthOptions } from "./types.js";
+import type { AdminAuthOptions, AdminSession } from "./types.js";
 import { toAdminUser } from "./user.js";
 
 /**
@@ -16,8 +15,8 @@ export type AdminAccess =
   /** No account exists yet, so there is nobody to be — the admin shows the first-account form. */
   | { status: "setup" }
   | { status: "anonymous" }
-  | { status: "forbidden"; session: AuthSession }
-  | { status: "allowed"; session: AuthSession };
+  | { status: "forbidden"; session: AdminSession }
+  | { status: "allowed"; session: AdminSession };
 
 /** Auth resolved to what the rest of the package uses: what to advertise, who is asking, what to guard. */
 export interface ResolvedAdminAuth {
@@ -57,15 +56,15 @@ export function resolveAdminAuth(
 ): ResolvedAdminAuth {
   const authorize = options.authorize ?? (() => true);
   const protect = options.protect ?? writesToApi(api);
-  const basePath = options.basePath ?? "/auth";
+  const basePath = options.basePath ?? "/api/auth";
   const setup = options.setup
     ? resolveAdminSetup(options.setup, adminBasePath)
     : undefined;
 
   const base: Omit<AdminAuth, "setup"> = {
     basePath,
-    signIn: options.signInPath ?? `${basePath}/login`,
-    signOut: options.signOutPath ?? `${basePath}/logout`,
+    signIn: options.signInPath ?? `${basePath}/sign-in/email`,
+    signOut: options.signOutPath ?? `${basePath}/sign-out`,
     providers: options.providers ?? [],
   };
 

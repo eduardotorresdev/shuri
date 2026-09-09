@@ -11,6 +11,9 @@ const collections = [
     title: "Posts",
     singular: "Post",
     plural: "Posts",
+    // Public reads, declared: with the plugin resolving a principal, an op with no rule needs a
+    // signed-in one.
+    access: { list: () => true, view: () => true },
     fields: [{ type: "text", name: "title", required: true }],
   },
 ] as const satisfies readonly CollectionSchema[];
@@ -122,7 +125,7 @@ describe("better-auth on a Shuri store", () => {
     expect(response.headers.getSetCookie().join(";")).toContain("session_token");
   });
 
-  it("resolves that cookie back to a session, in @shuri/auth's shape", async () => {
+  it("resolves that cookie back to a session, in the admin's shape", async () => {
     await app.handler(json("/api/auth/sign-up/email", { ...CREDENTIALS, name: "Ada" }));
     const signIn = await app.handler(json("/api/auth/sign-in/email", CREDENTIALS));
     const cookie = signIn.headers
@@ -137,7 +140,6 @@ describe("better-auth on a Shuri store", () => {
     expect(session?.user.email).toBe(CREDENTIALS.email);
     expect(session?.user.name).toBe("Ada");
     expect(typeof session?.expiresAt).toBe("number");
-    expect(session?.renewed).toBe(false);
   });
 
   it("has no session for a request carrying no cookie", async () => {
@@ -161,7 +163,7 @@ describe("better-auth on a Shuri store", () => {
     expect(response.status).toBeGreaterThanOrEqual(400);
   });
 
-  it("leaves the app's own routes alone", async () => {
+  it("leaves the app's own routes alone, guarded by their own rules", async () => {
     const response = await app.handler(new Request("http://localhost/collections/posts"));
 
     expect(response.status).toBe(200);

@@ -23,7 +23,7 @@ StoreRecord>` (one table per slug) and globals in a single `Map<slug, RecordInpu
 - **Indexes** — a field declared `index: true` gets a secondary index (`Map<value, Set<id>>`),
   kept in step by `insert`/`update`/`delete`. A `findMany`/`count` whose `where` has an `eq`
   filter on such a field starts from that value's records instead of the whole table (the other
-  filters still apply); this is what makes `@shuri/auth`'s per-request session lookup O(1)
+  filters still apply); this is what makes `@shuri/better-auth`'s per-request session lookup O(1)
   instead of O(sessions). Only `eq` uses the index — sorting and range filters still scan.
 - **No table copy for the plain page** — a `findMany` with neither `where` nor `orderBy` pages
   straight off the table iterator (`page`), and `count` without `where` is arithmetic on

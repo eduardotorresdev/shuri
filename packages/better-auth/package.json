@@ -19,7 +19,6 @@
   },
   "dependencies": {
     "@shuri/api": "workspace:*",
-    "@shuri/auth": "workspace:*",
     "@shuri/core": "workspace:*",
     "@shuri/sdk": "workspace:*",
     "@shuri/store": "workspace:*",

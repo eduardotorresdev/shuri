@@ -1,7 +1,7 @@
 import type { AccessContext, Principal } from "@shuri/core";
 import { ForbiddenError, UnauthenticatedError } from "./errors.js";
 
-/** Resolves who is behind a request. `@shuri/auth` provides one; a host may provide its own. */
+/** Resolves who is behind a request. `@shuri/better-auth` provides one; a host may provide its own. */
 export type PrincipalResolver = (request: Request) => Promise<Principal>;
 
 /**

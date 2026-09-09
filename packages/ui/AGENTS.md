@@ -148,18 +148,19 @@ src/
   - `protect.ts` defaults to **writes only**. Reads are what a headless CMS's API is for — the site
     consuming it holds no session — and closing them would change how an app behaves merely because
     it gained an admin. `everythingUnderApi` closes them, at the cost of a public API.
-  - `authorize` is the entire authorization story, and it defaults to _any session_. `@shuri/auth`
-    has no roles; inventing some here would put a second, weaker permission model beside whatever the
-    host already has. **With open signup and the default, anyone who registers can edit everything.**
-    (`@shuri/better-auth` does have roles, through better-auth's `admin` plugin — `authorize` then
-    reads `session.user.role`.)
-  - `AdminSessionSource` is the whole of what the admin needs from an auth implementation, which is
-    why swapping one in costs nothing here: `@shuri/better-auth` satisfies it and every screen below
-    is unchanged. `signInPath`/`signOutPath` exist for the same reason — `@shuri/auth` serves
-    `/auth/login`, better-auth serves `/api/auth/sign-in/email`, and the admin is told which.
-  - `user.ts` whitelists three fields off `AuthUser`, which carries an index signature — every extra
-    field a host declares on `users` would otherwise ride along into a document served to anonymous
-    callers.
+  - `authorize` is the entire authorization story, and it defaults to _any session_. Inventing
+    roles here would put a second, weaker permission model beside whatever the host already has.
+    **With open signup and the default, anyone who registers can edit everything.** A host stamps
+    a `role` on the user (better-auth's `additionalFields`, its `admin` plugin, or the setup flow's
+    `fields`) and `authorize` reads `session.user["role"]`.
+  - `AdminSessionSource` (`auth/types.ts`) is the whole of what the admin needs from an auth
+    implementation, in the admin's own vocabulary (`AdminSession`/`AdminSessionUser`), which is why
+    swapping one in costs nothing here: `@shuri/better-auth` satisfies it and every screen below is
+    unchanged. `basePath`/`signInPath`/`signOutPath` default to better-auth's own routes and exist
+    so a host with its own scheme can say otherwise.
+  - `user.ts` whitelists three fields off `AdminSessionUser`, which carries an index signature —
+    every extra field a host declares on its users would otherwise ride along into a document
+    served to anonymous callers.
 - **lib/styles/admin.css** — the design, in one file. Four theme colours (`--shuri-c1`…`c4`) and
   nothing else is themeable: the paper (cream page, lighter panel, white cards) and the ink are what
   make the admin legible, so they are fixed. The `-deep` and `-tint` variants are derived from the
@@ -187,10 +188,12 @@ src/
     than a value.
   - A live session wins over `required()`: an account demonstrably exists, whatever the host's
     predicate currently says.
-- **shared/auth.ts#signInErrorMessage** — collapses 400 and 401 into one sentence. `@shuri/auth`
-  answers a wrong password and an unknown email identically on purpose, and the 400's own text names
-  an internal field path (`body.password`); anything else keeps its message, since a 500 is not a
-  typo.
+- **shared/auth.ts** — sign-in and sign-out against the paths the schema advertises, and
+  `signInSocial`, which posts to `{basePath}/sign-in/social` and hands back the URL the browser then
+  navigates to (a social sign-in is a full-page round trip another origin, which XHR cannot follow).
+  `signInErrorMessage` collapses 400 and 401 into one sentence: better-auth answers a wrong password
+  and an unknown email identically on purpose, and the 400's own text names a field; anything else
+  keeps its message, since a 500 is not a typo.
 - **lib/fields/FieldControl.svelte** — the single `type` switch in the package. Supporting a new
   field type added to `@shuri/core` is one branch here plus a component beside it; nothing else in
   the admin knows the union exists.
@@ -213,8 +216,12 @@ src/
   advertises, turning a non-2xx into an `AdminRequestError` carrying `issues`. `fetchAdminSchema` is
   separate because it produces `createAdminClient`'s argument: the schema names the paths, so the
   data client can't exist before it has been read.
-- **server/users/** — the Users screens' data routes, at `{basePath}/api/users`, delegating to
-  `@shuri/auth`'s `AuthApi.users`. Three things about them are deliberate:
+- **server/users/** — the Users screens' data routes, at `{basePath}/api/users`, delegating to a
+  `UserAdminApi` (`users/types.ts`, the admin's port; `@shuri/better-auth` implements it). The
+  bodies are validated here (`users/validate.ts`, over `@shuri/validate`, against the admin's own
+  contract) so every implementation behind the port receives the same already-checked shape, and
+  the form the screens render comes from `users/collection.ts` — the admin's field list, not any
+  implementation's table. Three things about the routes are deliberate:
   - **They are inside the admin's mount, not on the REST surface.** `users` stays `internal: true`,
     so it is served nowhere else; this is the one door into it, and it is behind the admin's own
     `authorize`.
@@ -225,8 +232,8 @@ src/
   - **`/api/users`, not `/users`.** The latter is the Users _page_, and the client router owns every
     path under `basePath` that isn't a file; a data route there answers the browser's page request
     with JSON. (Caught exactly that way, by loading the page.)
-    The screens appear when the host's auth offers user administration — `app.auth` carries `users`,
-    so passing it is enough — and `auth.users: false` leaves them out. **Whoever may use the admin may
+    The screens appear when the host's auth offers user administration — `ba.sessionSource`
+    carries `users`, so passing it is enough — and `auth.users: false` leaves them out. **Whoever may use the admin may
     mint an account**, which with the default `authorize` means minting an administrator.
 - **lib/users/UserForm.svelte** — the account form. Not `RecordForm`, though it renders the same
   controls from the same schema: a user carries one thing no record does, a credential that is
@@ -271,28 +278,34 @@ const app = create({
 });
 ```
 
-Behind a login, `handlers` becomes a function — the `AuthApi` cannot exist before the store does, so
-it has to be received rather than passed in:
+Behind a login, the admin mounts as a plugin beside the auth plugin, so it can be handed the
+session source that same `create()` call binds:
 
 ```ts
+const ba = betterAuthPlugin({ options: { emailAndPassword: { enabled: true } } });
+
 const app = create({
   collections,
   globals,
   adapter,
-  auth: { cookie: { secure: true } },
-  handlers: ({ auth }) => [
-    createAdminHandler(
-      { collections, globals },
-      {
-        auth: {
-          auth,
-          // Who counts as an editor. Without it, any session is one.
-          authorize: (session) => session.user["role"] === "editor",
-          // Optional: close reads as well, giving up a publicly readable API.
-          // protect: everythingUnderApi({ collections: "/collections", globals: "/globals", events: "/events" }),
-        },
-      },
-    ),
+  plugins: [
+    ba,
+    {
+      name: "admin",
+      handlers: () => [
+        createAdminHandler(
+          { collections, globals },
+          {
+            auth: {
+              auth: ba.sessionSource,
+              basePath: ba.basePath,
+              authorize: (session) => session.user["role"] === "admin",
+              setup: { source: ba.setupSource, token: process.env.SHURI_SETUP_TOKEN },
+            },
+          },
+        ),
+      ],
+    },
   ],
 });
 ```
@@ -361,9 +374,10 @@ declares `typescript@~6` and `@typescript/native` and runs `svelte-check --tsgo`
 ## Role in the monorepo
 
 Depends on `@shuri/core` (the schema and its visibility rules), `@shuri/api` (`FallingHandler`,
-`ApiError`), `@shuri/auth` (`AuthSession`/`AuthUser` and `UnauthenticatedError` — types and one error
-class, never `createAuth`), and `@shuri/store`/`@shuri/validate` for the `Query` and `Issue` types the
-browser client speaks. It is
-a **leaf**: nothing depends on it, and `@shuri/sdk` in particular does not — the admin arrives
-through `create({ handlers })`, which is how any handler outside the core toolkit gets mounted, so
-an app that wants no admin pays nothing for it. `@shuri/demo` mounts it at `/admin`.
+`ApiError`, `UnauthenticatedError`), and `@shuri/store`/`@shuri/validate` for the `Query` and `Issue`
+types the browser client speaks and the body validation the server does. It owns the auth-facing
+ports (`AdminSessionSource`, `AdminSetupSource`, `UserAdminApi`) that `@shuri/better-auth`
+implements, so the dependency points from the auth package to this one, never back. It is
+`@shuri/sdk` does not depend on it either — the admin arrives through `create({ handlers })` or,
+beside an auth plugin, `create({ plugins })`, which is how any handler outside the core toolkit gets
+mounted, so an app that wants no admin pays nothing for it. `@shuri/demo` mounts it at `/admin`.

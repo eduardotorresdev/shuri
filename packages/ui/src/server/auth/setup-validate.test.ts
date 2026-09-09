@@ -24,7 +24,7 @@ describe("validateSetupBody", () => {
     expect(paths({ ...valid, email: "ada" })).toEqual(["body.email"]);
   });
 
-  it("rejects a password shorter than the floor @shuri/auth also enforces", () => {
+  it("rejects a password shorter than the floor better-auth also enforces", () => {
     expect(paths({ ...valid, password: "short" })).toEqual(["body.password"]);
   });
 

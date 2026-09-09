@@ -59,8 +59,8 @@ src/
 - **`index` (a field)** — a hint to the adapter: index this field for equality lookups
   (`where: { field: { op: "eq" } }`). Without it a lookup by value is a scan of the whole
   collection in every adapter (the memory adapter copies and filters the table, Mongo walks the
-  collection). `@shuri/auth` declares it on every field it looks up per request
-  (`_sessions.tokenHash`, `_client_tokens.tokenHash`, `_clients.clientId`, `users.email`, ...).
+  collection). Declare it on any field a hot path looks up per request — a session token, an
+  email.
   Validated as a boolean, applied by `@shuri/store-memory` (a secondary `Map`) and
   `@shuri/store-mongo` (`createIndex` on first touch); not a uniqueness constraint.
 - **`hidden` (a field) and `internal` (a collection)** — two flags this package declares, validates
@@ -136,8 +136,8 @@ src/
 types): it calls `redact.ts`'s functions from its `visibility/` folder to enforce `hidden`/`internal`,
 reads `Core`/`CollectionSchema`/`GlobalSchema`/`Field` to build the OpenAPI document, and calls
 `access/policy.ts` from its `access/` folder — leaving the `createCore` call itself to `@shuri/sdk`.
-`@shuri/auth` declares its six collections as plain schema literals of this package and expands
-client roles with `expandScopes`. `@shuri/store` runs the `hooks` declared here. `@shuri/ui` calls
+`@shuri/better-auth` derives better-auth's tables as plain schema literals of this package.
+`@shuri/store` runs the `hooks` declared here. `@shuri/ui` calls
 `redact.ts`'s `servableCollections`/`visibleFields` to build the document its admin generates every
 screen from, so the admin shows exactly the collections and fields the HTTP surface does. `tsconfig`
 pulls in `@types/node` only for the `Request` type on `AccessContext`.

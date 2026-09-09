@@ -16,15 +16,15 @@ function loginRequests({ login }: Fixtures): CannonRequest[] {
   return [
     {
       method: "POST",
-      path: "/auth/login",
-      headers: { "content-type": "application/json" },
+      path: "/api/auth/sign-in/email",
+      headers: { "content-type": "application/json", origin: "http://localhost" },
       body: JSON.stringify(login),
     },
   ];
 }
 
 /**
- * What PBKDF2 does to everyone else. Login runs on the libuv threadpool, but the threadpool's
+ * What scrypt does to everyone else. Login runs on the libuv threadpool, but the threadpool's
  * threads and the event loop share the one core, so reads pay for every login in progress. Three
  * rows: the reads alone (the reference), the reads while logins run, the logins themselves.
  */
@@ -32,7 +32,7 @@ export const loginNoise: Scenario = {
   id: "login-noise",
   sut: "auth",
   description:
-    "`GET /collections/posts/:id` at c=32 while `POST /auth/login` runs at c=4 on the same core. The first row is the reads alone; the difference to the second is what PBKDF2 costs a read's p99.",
+    "`GET /collections/posts/:id` at c=32 while `POST /api/auth/sign-in/email` runs at c=4 on the same core. The first row is the reads alone; the difference to the second is what scrypt costs a read's p99.",
   columns: [...HTTP_COLUMNS],
   async run(context) {
     const statsUrl = `${context.baseUrl}/__bench/stats`;

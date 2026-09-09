@@ -33,7 +33,7 @@ export interface BuildOpenApiDocumentOptions {
   realtime?: boolean;
   /**
    * Extra path items merged in after the built-in ones — a package mounting routes ahead of this
-   * one (`@shuri/auth`) describes them here, so the document keeps describing every route served.
+   * one (an auth plugin) describes them here, so the document keeps describing every route served.
    */
   paths?: Record<string, Record<string, unknown>>;
   /**

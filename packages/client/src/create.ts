@@ -21,7 +21,7 @@ export interface ClientPaths {
   collections?: string;
   /** Where the globals are mounted. Defaults to "/globals". */
   globals?: string;
-  /** Where the auth routes are mounted. Defaults to "/auth". */
+  /** Where the auth routes are mounted. Defaults to "/api/auth", which is better-auth's. */
   auth?: string;
   /** Where the event stream is mounted. Defaults to "/events". */
   events?: string;
@@ -32,14 +32,12 @@ export interface ClientConfig {
   baseUrl: string;
   /** The `fetch` to use; the global one by default. A test binds it to `app.handler` directly. */
   fetch?: FetchLike;
-  /** A bearer token to send from the start (a client-credentials token, a session token). */
+  /** A bearer token to send from the start (better-auth's `bearer` plugin, or a host's own scheme). */
   token?: string;
   /** The `credentials` mode of every request. Defaults to "include", so a browser rides on the session cookie. */
   credentials?: RequestCredentials;
   /** The base paths, when the server relocated any of its handlers. */
   paths?: ClientPaths;
-  /** The session cookie's name, when the server renamed it. Defaults to "shuri_session". */
-  sessionCookie?: string;
 }
 
 /**
@@ -121,17 +119,14 @@ export function createClient<S extends ClientSchema = ClientSchema>(
   const paths = {
     collections: config.paths?.collections ?? "/collections",
     globals: config.paths?.globals ?? "/globals",
-    auth: config.paths?.auth ?? "/auth",
+    auth: config.paths?.auth ?? "/api/auth",
     events: config.paths?.events ?? "/events",
   };
 
   return {
     collections: lazyRecord((slug) => collectionClient(http, paths, slug)) as never,
     globals: lazyRecord((slug) => globalClient(http, paths, slug)) as never,
-    auth: authClient(http, {
-      basePath: paths.auth,
-      cookieName: config.sessionCookie ?? "shuri_session",
-    }),
+    auth: authClient(http, { basePath: paths.auth }),
     realtime: {
       subscribe: (selection, listener, options) =>
         subscribe(http, paths.events, selection, listener, options),

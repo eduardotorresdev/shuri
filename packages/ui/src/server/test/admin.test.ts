@@ -167,7 +167,7 @@ describe("createAdminHandler with auth", () => {
   it("tells a signed-out visitor where to sign in and nothing more", async () => {
     const schema = await schemaOf();
 
-    expect(schema.auth?.basePath).toBe("/auth");
+    expect(schema.auth?.basePath).toBe("/api/auth");
     expect(schema.viewer).toEqual({ status: "anonymous" });
     expect(schema.collections).toEqual([]);
   });

@@ -1,14 +1,17 @@
+import type { Principal } from "@shuri/core";
 import { createMemoryAdapter } from "@shuri/store-memory";
 import { beforeEach, describe, expect, it } from "vitest";
-import { create, type AccessContext } from "../index.js";
+import { create, type AccessContext, type ShuriPlugin } from "../index.js";
 
-/**
- * Payload-style access rules end to end through `create()`: a `Where` rule scoping posts to their
- * author, a public read on a global, and a client-credentials client capped by its scopes — all on
- * one app, one store, one handler.
+/*
+ * Payload-style access rules end to end through `create()`, with the principal coming from a
+ * plugin: a `Where` rule scoping posts to their author, a public read on a global, and the OpenAPI
+ * document describing how requests authenticate — all on one app, one store, one handler.
+ *
+ * The plugin here is a stub reading a bearer token, not a real auth implementation: what this test
+ * covers is the wiring between `plugins[].principal` and `@shuri/api`'s access control. The same
+ * flow over real sessions lives in `@shuri/better-auth`'s tests.
  */
-const credentials = { email: "ada@example.com", password: "correct-horse-battery" };
-
 const mine = (ctx: AccessContext) =>
   ctx.user ? { author: { op: "eq" as const, value: ctx.user.id } } : false;
 
@@ -36,6 +39,21 @@ const globals = [
   },
 ] as const;
 
+/** Whoever sends `Authorization: Bearer <id>` is the user with that id. */
+const bearerAuth: ShuriPlugin = {
+  name: "bearer",
+  principal: async (incoming): Promise<Principal> => {
+    const id = incoming.headers.get("authorization")?.replace(/^Bearer /, "");
+    return id ? { kind: "user", user: { id } } : { kind: "anonymous" };
+  },
+  openapi: {
+    security: {
+      schemes: { bearerAuth: { type: "http", scheme: "bearer" } },
+      requirements: () => [{ bearerAuth: [] }],
+    },
+  },
+};
+
 let app: ReturnType<typeof buildApp>;
 
 function buildApp() {
@@ -43,10 +61,7 @@ function buildApp() {
     collections,
     globals,
     adapter: createMemoryAdapter(),
-    auth: {
-      cookie: { secure: false },
-      clients: { roles: { integrator: ["posts:list", "posts:view"] } },
-    },
+    plugins: [bearerAuth],
     realtime: { heartbeatMs: 0 },
   });
 }
@@ -68,21 +83,9 @@ function request(
   );
 }
 
-async function signUp(): Promise<{ cookie: string; id: string }> {
-  const response = await request("/auth/signup", {
-    method: "POST",
-    body: JSON.stringify(credentials),
-  });
-  const header = response.headers.get("set-cookie") as string;
-  const cookie = decodeURIComponent(header.slice("shuri_session=".length).split(";")[0]);
-  const { user } = (await response.json()) as { user: { id: string } };
-  return { cookie, id: user.id };
-}
-
 describe("an app with access rules", () => {
   it("lets the public read, and only the author edit", async () => {
-    const ada = await signUp();
-    const post = await app.collections.posts.insert({ title: "Mine", author: ada.id });
+    const post = await app.collections.posts.insert({ title: "Mine", author: "ada" });
     const other = await app.collections.posts.insert({
       title: "Theirs",
       author: "someone",
@@ -95,7 +98,7 @@ describe("an app with access rules", () => {
         .status,
     ).toBe(401);
 
-    const asAda = { cookie: `shuri_session=${ada.cookie}` };
+    const asAda = { authorization: "Bearer ada" };
     const patch = { method: "PATCH", body: JSON.stringify({ title: "Edited" }) };
     expect((await request(`/collections/posts/${other.id}`, patch, asAda)).status).toBe(
       404,
@@ -107,41 +110,33 @@ describe("an app with access rules", () => {
       (
         await request(
           "/collections/posts",
-          { method: "POST", body: JSON.stringify({ title: "New", author: ada.id }) },
+          { method: "POST", body: JSON.stringify({ title: "New", author: "ada" }) },
           asAda,
         )
       ).status,
     ).toBe(201);
   });
 
-  it("caps a client at its scopes, and issues its token over the RFC endpoint", async () => {
-    const { client, clientSecret } = await app.auth.clients.create({
-      name: "CI",
-      roles: ["integrator"],
+  it("refuses an op with no rule to anonymous, and answers 401 rather than 403", async () => {
+    const response = await request("/globals/site", {
+      method: "PATCH",
+      body: JSON.stringify({ name: "x" }),
     });
-    const basic = btoa(`${client.clientId}:${clientSecret}`);
-    const token = await request(
-      "/auth/token",
-      { method: "POST", body: "grant_type=client_credentials&scope=posts:list" },
-      {
-        authorization: `Basic ${basic}`,
-        "content-type": "application/x-www-form-urlencoded",
-      },
-    );
-    expect(token.status).toBe(200);
-    const { access_token } = (await token.json()) as { access_token: string };
-    const bearer = { authorization: `Bearer ${access_token}` };
 
-    expect((await request("/collections/posts", {}, bearer)).status).toBe(200);
-    expect(
-      (
-        await request(
-          "/collections/posts",
-          { method: "POST", body: JSON.stringify({ title: "x", author: "y" }) },
-          bearer,
-        )
-      ).status,
-    ).toBe(403);
-    expect((await request("/globals/site", {}, bearer)).status).toBe(403);
+    expect(response.status).toBe(401);
+  });
+
+  it("describes how requests authenticate, on every guarded operation", async () => {
+    const document = (await (
+      await app.handler(new Request("http://localhost/openapi.json"))
+    ).json()) as {
+      paths: Record<string, Record<string, unknown>>;
+      components: { securitySchemes: Record<string, unknown> };
+    };
+
+    expect(Object.keys(document.components.securitySchemes)).toEqual(["bearerAuth"]);
+    expect(document.paths["/collections/posts"]["post"]).toMatchObject({
+      security: [{ bearerAuth: [] }],
+    });
   });
 });

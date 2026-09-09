@@ -5,7 +5,6 @@ import {
   type Field,
   type GlobalSchema,
 } from "@shuri/core";
-import { MIN_PASSWORD_LENGTH, usersCollection } from "@shuri/auth";
 import type {
   AdminApiPaths,
   AdminAuth,
@@ -14,6 +13,8 @@ import type {
   AdminSchema,
   AdminUsers,
 } from "../../shared/schema.js";
+import { MIN_PASSWORD_LENGTH } from "../auth/setup-validate.js";
+import { adminUsersCollection } from "../users/collection.js";
 
 /** The declared schema the admin describes — the same two arrays a consumer hands `create()`. */
 export interface AdminSchemaSource {
@@ -119,48 +120,20 @@ export function buildAdminSchema(
 }
 
 /**
- * The fields of `users` the admin renders, in the order the screens read best.
- *
- * `createdAt` is left out, and it is the only one: it is stored as epoch milliseconds, and there is
- * no `date` field type in `@shuri/core` — so a column for it would print `1788733871182` and a
- * filter for it would ask an author to type one. Leaving it out is better than showing it badly;
- * bringing it back is a field type, not a change here.
- *
- * `passwordHash` never reaches this list: `visibleFields` drops it, exactly as it drops any `hidden`
- * field of any collection.
- */
-const USER_FIELDS: Readonly<Record<string, string>> = {
-  email: "E-mail",
-  name: "Nome",
-  emailVerified: "E-mail verificado",
-};
-
-/**
  * The `users` collection as the admin's screens render it.
  *
- * Built from `@shuri/auth`'s own schema, not from a copy declared here: the form an operator fills
- * in is generated from the same field list the store validates against, so the two cannot drift.
+ * Built from `adminUsersCollection`, the admin's own contract, so the form an operator fills in is
+ * generated from the same field list the users routes validate against, and the two cannot drift.
+ * A credential is not a field: the password box is the form's own, and `passwordMinLength` tells it
+ * the policy the routes enforce.
  * @param path - The path the users routes are mounted at.
  * @returns The users block for the schema document.
  */
 export function adminUsers(path: string): AdminUsers {
-  const collection = toAdminCollection(usersCollection);
-
   return {
     path,
     passwordMinLength: MIN_PASSWORD_LENGTH,
-    collection: {
-      ...collection,
-      title: "Usuários",
-      singular: "Usuário",
-      plural: "Usuários",
-      // Labelled here rather than in `@shuri/auth`: that package's schema is the app's data model
-      // and says nothing in any particular language, while everything an author reads in this admin
-      // is written in one.
-      fields: collection.fields
-        .filter((field) => field.name in USER_FIELDS)
-        .map((field) => ({ ...field, label: USER_FIELDS[field.name] })),
-    },
+    collection: toAdminCollection(adminUsersCollection),
   };
 }
 

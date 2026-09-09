@@ -1,6 +1,7 @@
 import {
   ApiError,
   MethodNotAllowedError,
+  UnauthenticatedError,
   jsonResponse,
   noContentResponse,
   parseQuery,
@@ -8,10 +9,11 @@ import {
   toErrorResponse,
   type FallingHandler,
 } from "@shuri/api";
-import { UnauthenticatedError, type UserAdminApi } from "@shuri/auth";
 import type { AdminAccess, ResolvedAdminAuth } from "../auth/access.js";
 import { AdminForbiddenError } from "../auth/guard.js";
 import { matchUsersRoute } from "./routes.js";
+import type { UserAdminApi } from "./types.js";
+import { parseNewUser, parseUserPatch } from "./validate.js";
 
 /**
  * An operator tried to delete their own account.
@@ -40,17 +42,20 @@ export class SelfDeletionError extends ApiError {
  * the admin, and the client router owns it. Two things cannot answer one URL — the browser asking
  * for the Users screen would get this JSON instead of the app.
  *
- * **Inside the admin's own mount path, not on the REST surface** — which is the whole point.
- * `users` is `internal: true` because, with no per-collection rules, a served `users` is an open
- * directory of every registered address (`hidden` redacts a field, it doesn't hide rows). These
- * routes leave that exactly as it is: the collection stays unserved, and the one door into it is
- * this one, behind the admin's own gate.
+ * **Inside the admin's own mount path, not on the REST surface** — which is the whole point. The
+ * auth implementation's user table is `internal`, because with no per-collection rules a served
+ * one is an open directory of every registered address (`hidden` redacts a field, it doesn't hide
+ * rows). These routes leave that exactly as it is: the table stays unserved, and the one door into
+ * it is this one, behind the admin's own gate.
  *
  * That gate is checked **here**, not by `createAdminGuard`: the guard protects the app's REST base
  * paths, and these routes are deliberately outside them. Every method, reads included, requires an
  * `allowed` session — the default `protect` leaves REST reads open because a headless CMS's content
  * is meant to be read, and a list of email addresses is not content.
- * @param users - The user administration API, i.e. `app.auth.users`.
+ *
+ * Bodies are validated here, against the admin's own contract (`NewAdminUser`/`AdminUserPatch`),
+ * so every `UserAdminApi` behind these routes receives the same already-checked shape.
+ * @param users - The user administration API, e.g. `ba.sessionSource.users`.
  * @param auth - The resolved admin auth, for resolving who is asking.
  * @param path - The path the routes are mounted at, as the schema document advertises it.
  * @returns A handler answering the users routes, `undefined` for anything else.
@@ -81,9 +86,12 @@ export function createAdminUsersHandler(
       case "GET":
         return jsonResponse(await users.list(parseQuery(url.searchParams)));
       case "POST":
-        return jsonResponse(await users.create((await readJsonBody(request)) as never), {
-          status: 201,
-        });
+        return jsonResponse(
+          await users.create(parseNewUser(await readJsonBody(request))),
+          {
+            status: 201,
+          },
+        );
       default:
         throw new MethodNotAllowedError(request.method);
     }
@@ -99,7 +107,7 @@ export function createAdminUsersHandler(
         return jsonResponse(await users.get(id));
       case "PATCH":
         return jsonResponse(
-          await users.update(id, (await readJsonBody(request)) as never),
+          await users.update(id, parseUserPatch(await readJsonBody(request))),
         );
       case "DELETE": {
         const self = access.status === "allowed" && access.session.user.id === id;

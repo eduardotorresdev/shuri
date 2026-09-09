@@ -1,5 +1,9 @@
-import { ApiError, toErrorResponse, type FallingHandler } from "@shuri/api";
-import { UnauthenticatedError } from "@shuri/auth";
+import {
+  ApiError,
+  UnauthenticatedError,
+  toErrorResponse,
+  type FallingHandler,
+} from "@shuri/api";
 import type { ResolvedAdminAuth } from "./access.js";
 
 /** A signed-in user the host's `authorize` turned away. 403, not 401: signing in again changes nothing. */
@@ -23,8 +27,8 @@ export class AdminForbiddenError extends ApiError {
  * that document, so gating it would leave a signed-out visitor with nothing to sign in *with*; the
  * document withholds every collection and global instead (see `schema/build.ts#shellSchema`).
  *
- * Mounted first — `create()`'s `handlers` run ahead of every built-in route, and ahead of auth's
- * own, so a login request still reaches the routes that issue a session.
+ * Mounted first — `create()`'s `handlers` run ahead of every built-in route, and ahead of the auth
+ * plugin's own, so a login request still reaches the routes that issue a session.
  * @param auth - The resolved auth: what to protect, and how to resolve a session.
  * @returns A handler answering 401/403 for a protected request without one, `undefined` otherwise.
  */

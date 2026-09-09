@@ -12,6 +12,7 @@
     "bench:reference": "node src/reference.ts --mode docker"
   },
   "dependencies": {
+    "@shuri/better-auth": "workspace:*",
     "@shuri/core": "workspace:*",
     "@shuri/sdk": "workspace:*",
     "@shuri/store": "workspace:*",

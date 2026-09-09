@@ -1,3 +1,4 @@
+import { betterAuthPlugin } from "@shuri/better-auth";
 import { create } from "@shuri/sdk";
 import { createMemoryAdapter } from "@shuri/store-memory";
 import { bench, describe } from "vitest";
@@ -15,13 +16,21 @@ const SESSIONS = 1_000;
 const open = create({ collections, globals, adapter: createMemoryAdapter() });
 const openFixtures = await seed(open, { posts: POSTS, sessions: 0 });
 
+const ba = betterAuthPlugin({
+  options: {
+    baseURL: "http://sut",
+    secret: "bench-secret-at-least-32-characters-long",
+    emailAndPassword: { enabled: true },
+    advanced: { useSecureCookies: false },
+  },
+});
 const auth = create({
   collections,
   globals,
   adapter: createMemoryAdapter(),
-  auth: { cookie: { secure: false }, clients: { roles: { integrator: ["posts:*"] } } },
+  plugins: [ba],
 });
-const authFixtures = await seed(auth, { posts: POSTS, sessions: SESSIONS });
+const authFixtures = await seed(auth, { posts: POSTS, sessions: SESSIONS, auth: ba });
 
 /** Longer than tinybench's defaults: the seed leaves a heap full of garbage, and 500 ms of samples would be mostly its collection. */
 const OPTIONS = { time: 2_000, warmupTime: 1_000 };
@@ -74,19 +83,6 @@ describe(`app.handler, memory adapter, ${POSTS} posts`, () => {
       const response = await auth.handler(
         new Request(`http://sut/collections/posts/${nextId(authFixtures.ids)}`, {
           headers: { cookie: authFixtures.sessionCookie ?? "" },
-        }),
-      );
-      await response.json();
-    },
-    OPTIONS,
-  );
-
-  bench(
-    "GET /collections/posts/:id with client token (auth on)",
-    async () => {
-      const response = await auth.handler(
-        new Request(`http://sut/collections/posts/${nextId(authFixtures.ids)}`, {
-          headers: { authorization: `Bearer ${authFixtures.clientToken ?? ""}` },
         }),
       );
       await response.json();

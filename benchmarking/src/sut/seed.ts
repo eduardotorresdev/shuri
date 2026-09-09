@@ -1,4 +1,4 @@
-import type { AuthApi } from "@shuri/sdk";
+import type { BetterAuthPlugin } from "@shuri/better-auth";
 import { samplePost, type PostInput } from "./schema.ts";
 
 /** What the runner needs from the SUT to drive every scenario, served at `/__bench/fixtures`. */
@@ -7,9 +7,7 @@ export interface Fixtures {
   ids: string[];
   /** A `Cookie` header value for one of the seeded sessions, or `undefined` with auth off. */
   sessionCookie?: string;
-  /** A `Bearer` client token scoped to `posts:*`, or `undefined` with auth off. */
-  clientToken?: string;
-  /** The credentials `POST /auth/login` accepts, or `undefined` with auth off. */
+  /** The credentials `POST /api/auth/sign-in/email` accepts, or `undefined` with auth off. */
   login?: { email: string; password: string };
   /** How the SUT was seeded, echoed so the report can state it. */
   seed: { posts: number; sessions: number };
@@ -27,24 +25,26 @@ interface SeedApp {
   globals: {
     site: { update(data: { name: string; tagline: string }): Promise<unknown> };
   };
-  auth: AuthApi | undefined;
+  handler: (request: Request) => Promise<Response>;
 }
 
 export interface SeedOptions {
   posts: number;
   sessions: number;
+  /** The auth plugin the app was built with, or `undefined` with auth off. */
+  auth?: BetterAuthPlugin;
 }
 
 /**
  * Seeds the SUT in-process and returns the fixtures the runner reads.
  *
- * Deliberately not through the public API: 1k sessions via `POST /auth/login` would cost 1k PBKDF2
- * runs (600k iterations each, minutes on one core), while `app.auth.createSession` is one hash of
- * the password total and then a SHA-256 per session. The **shape** of what's seeded is what
- * matters for the numbers — `_sessions` holding `sessions` rows is what makes the auth scan
- * O(sessions) — not how it got there.
+ * One account signs up through better-auth's own route (one password hash, and the response
+ * carries the cookie the `auth-session` scenario sends); the remaining sessions are inserted
+ * through better-auth's internal adapter, one row each and no hashing. The **shape** of what's
+ * seeded is what matters for the numbers — `session` holding `sessions` rows is what makes a
+ * session lookup O(sessions) on an adapter with no index — not how it got there.
  * @param app - The app to seed.
- * @param options - How many posts and sessions to create.
+ * @param options - How many posts and sessions to create, and the auth plugin if any.
  * @returns The fixtures.
  */
 export async function seed(app: SeedApp, options: SeedOptions): Promise<Fixtures> {
@@ -57,22 +57,28 @@ export async function seed(app: SeedApp, options: SeedOptions): Promise<Fixtures
 
   const fixtures: Fixtures = {
     ids,
-    seed: { posts: options.posts, sessions: app.auth ? options.sessions : 0 },
+    seed: { posts: options.posts, sessions: options.auth ? options.sessions : 0 },
   };
-  if (!app.auth) return fixtures;
+  if (!options.auth) return fixtures;
 
-  const { user, token: firstToken } = await app.auth.signUp(CREDENTIALS);
-  let token = firstToken;
+  const signup = await app.handler(
+    new Request(`http://sut${options.auth.basePath}/sign-up/email`, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "http://sut" },
+      body: JSON.stringify({ ...CREDENTIALS, name: "Bench" }),
+    }),
+  );
+  if (!signup.ok) throw new Error(`seed signup failed: ${signup.status}`);
+  const { user } = (await signup.json()) as { user: { id: string } };
+  fixtures.sessionCookie = signup.headers
+    .getSetCookie()
+    .map((cookie) => cookie.split(";")[0])
+    .join("; ");
+
+  const { internalAdapter } = await options.auth.instance().$context;
   for (let i = 1; i < options.sessions; i++) {
-    ({ token } = await app.auth.createSession(user.id));
+    await internalAdapter.createSession(user.id);
   }
-  fixtures.sessionCookie = `shuri_session=${encodeURIComponent(token)}`;
-
-  const { client } = await app.auth.clients.create({
-    name: "Bench integrator",
-    roles: ["integrator"],
-  });
-  fixtures.clientToken = (await app.auth.issueClientToken(client.clientId)).token;
   fixtures.login = CREDENTIALS;
   return fixtures;
 }

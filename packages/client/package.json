@@ -21,6 +21,7 @@
     "@shuri/core": "workspace:*"
   },
   "devDependencies": {
+    "@shuri/better-auth": "workspace:*",
     "@shuri/config": "workspace:*",
     "@shuri/sdk": "workspace:*",
     "@shuri/store-memory": "workspace:*",

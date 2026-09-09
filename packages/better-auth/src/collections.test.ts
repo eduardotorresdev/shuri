@@ -67,3 +67,19 @@ describe("betterAuthCollections", () => {
     expect(field(bySlug(collections, "user"), "image")).toBeDefined();
   });
 });
+
+describe("betterAuthCollections indexes", () => {
+  it("indexes the fields better-auth looks a row up by on a hot path", () => {
+    const collections = betterAuthCollections({});
+    const fieldOf = (slug: string, name: string) =>
+      collections
+        .find((entry) => entry.slug === slug)
+        ?.fields.find((f) => f.name === name);
+
+    expect(fieldOf("session", "token")?.index).toBe(true);
+    expect(fieldOf("session", "userId")?.index).toBe(true);
+    expect(fieldOf("user", "email")?.index).toBe(true);
+    expect(fieldOf("account", "userId")?.index).toBe(true);
+    expect(fieldOf("user", "name")?.index).toBeUndefined();
+  });
+});

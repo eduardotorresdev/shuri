@@ -37,104 +37,9 @@ describe("create({ handlers })", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual([]);
   });
-
-  it("runs them before auth's, so one of them can guard it", async () => {
-    const seen: string[] = [];
-    const app = create({
-      collections,
-      adapter: createMemoryAdapter(),
-      auth: {},
-      handlers: [
-        async (request) => {
-          seen.push(new URL(request.url).pathname);
-          return new Response(null, { status: 401 });
-        },
-      ],
-    });
-
-    const response = await app.handler(
-      new Request("http://x/auth/login", { method: "POST" }),
-    );
-
-    expect(response.status).toBe(401);
-    expect(seen).toEqual(["/auth/login"]);
-  });
 });
 
-describe("create({ handlers }) as a function", () => {
-  it("hands the built auth service to a handler that needs it", async () => {
-    let received: unknown;
-    const app = create({
-      collections,
-      adapter: createMemoryAdapter(),
-      auth: {},
-      handlers: ({ auth }) => {
-        received = auth;
-        return [];
-      },
-    });
-
-    expect(received).toBe(app.auth);
-    expect(typeof (received as { getSession?: unknown }).getSession).toBe("function");
-  });
-
-  it("gives `undefined` when auth is off, matching app.auth", () => {
-    let received: unknown = "untouched";
-    create({
-      collections,
-      adapter: createMemoryAdapter(),
-      handlers: ({ auth }) => {
-        received = auth;
-        return [];
-      },
-    });
-
-    expect(received).toBeUndefined();
-  });
-
-  it("mounts what the function returns, ahead of the built-in routes", async () => {
-    const app = create({
-      collections,
-      adapter: createMemoryAdapter(),
-      handlers: () => [async () => new Response("mine")],
-    });
-
-    const response = await app.handler(new Request("http://x/collections/posts"));
-
-    expect(await response.text()).toBe("mine");
-  });
-
-  it("lets a guard built from that auth refuse a request the auth routes still answer", async () => {
-    const app = create({
-      collections,
-      adapter: createMemoryAdapter(),
-      auth: {},
-      handlers: ({ auth }) => [
-        async (request) =>
-          new URL(request.url).pathname.startsWith("/collections") &&
-          !(await auth.getSession(request))
-            ? new Response(null, { status: 401 })
-            : undefined,
-      ],
-    });
-
-    expect((await app.handler(new Request("http://x/collections/posts"))).status).toBe(
-      401,
-    );
-    // Signup still works: the guard declines it, so auth's own handler gets its turn.
-    const signup = await app.handler(
-      new Request("http://x/auth/signup", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          email: "ada@example.com",
-          password: "correct horse battery",
-        }),
-      }),
-    );
-    expect(signup.status).toBe(201);
-  });
-});
+const principal = async () => ({ kind: "anonymous" as const });
 
 describe("create({ plugins })", () => {
   const extra = {
@@ -188,24 +93,47 @@ describe("create({ plugins })", () => {
     expect(seen).toEqual(["widgets"]);
   });
 
-  it("hands it the auth service too, so a guard can be built from it", () => {
-    let seen: unknown;
+  it("turns access control on when a plugin resolves the principal", async () => {
     const app = create({
       collections,
       adapter: createMemoryAdapter(),
-      auth: {},
       plugins: [
         {
-          name: "guard",
-          handlers({ auth }) {
-            seen = auth;
-            return [];
-          },
+          name: "auth",
+          principal: async (request) =>
+            request.headers.get("authorization") === "Bearer ada"
+              ? { kind: "user", user: { id: "u1" } }
+              : { kind: "anonymous" },
         },
       ],
     });
 
-    expect(seen).toBe(app.auth);
+    // `posts` declares no rule, so with a principal resolver on it takes a signed-in one.
+    expect((await app.handler(new Request("http://x/collections/posts"))).status).toBe(
+      401,
+    );
+    expect(
+      (
+        await app.handler(
+          new Request("http://x/collections/posts", {
+            headers: { authorization: "Bearer ada" },
+          }),
+        )
+      ).status,
+    ).toBe(200);
+  });
+
+  it("refuses two plugins each resolving a principal", () => {
+    expect(() =>
+      create({
+        collections,
+        adapter: createMemoryAdapter(),
+        plugins: [
+          { name: "one", principal },
+          { name: "two", principal },
+        ],
+      }),
+    ).toThrow(/"one" and "two"/);
   });
 
   it("mounts plugin handlers ahead of the built-in routes", async () => {

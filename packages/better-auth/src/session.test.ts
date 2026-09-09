@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { toAuthSession, toSessionResolver, type BetterAuthSession } from "./session.js";
+import { toAdminSession, toSessionResolver, type BetterAuthSession } from "./session.js";
 
 const resolved: BetterAuthSession = {
   session: { id: "s1", expiresAt: new Date("2026-12-01T00:00:00.000Z") },
@@ -12,9 +12,9 @@ const resolved: BetterAuthSession = {
   },
 };
 
-describe("toAuthSession", () => {
-  it("reshapes better-auth's session into the one the rest of the repo speaks", () => {
-    const session = toAuthSession(resolved);
+describe("toAdminSession", () => {
+  it("reshapes better-auth's session into the one the admin speaks", () => {
+    const session = toAdminSession(resolved);
 
     expect(session.id).toBe("s1");
     expect(session.user.email).toBe("ada@example.com");
@@ -23,7 +23,7 @@ describe("toAuthSession", () => {
   });
 
   it("reads a serialized date as well as a Date, since the store holds strings", () => {
-    const session = toAuthSession({
+    const session = toAdminSession({
       ...resolved,
       session: { id: "s1", expiresAt: "2026-12-01T00:00:00.000Z" },
     });
@@ -32,29 +32,17 @@ describe("toAuthSession", () => {
   });
 
   it("keeps the host's own user columns, which is what `authorize` reads", () => {
-    expect(toAuthSession(resolved).user["role"]).toBe("editor");
-  });
-
-  it("reports no renewal, since better-auth refreshes its own cookie", () => {
-    expect(toAuthSession(resolved).renewed).toBe(false);
-  });
-
-  it("falls back to 0 rather than NaN for an unparseable createdAt", () => {
-    const session = toAuthSession({
-      ...resolved,
-      user: { id: "u1", email: "a@b.com" },
-    });
-
-    expect(session.user.createdAt).toBe(0);
+    expect(toAdminSession(resolved).user["role"]).toBe("editor");
   });
 
   it("leaves `name` off rather than carrying a null through", () => {
-    const session = toAuthSession({
+    const session = toAdminSession({
       ...resolved,
       user: { id: "u1", email: "a@b.com", name: null },
     });
 
     expect(session.user.name).toBeUndefined();
+    expect("name" in session.user).toBe(false);
   });
 });
 

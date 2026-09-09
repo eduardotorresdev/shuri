@@ -20,7 +20,7 @@ src/
   reference.ts          measures sut/reference.ts (bare node, the bridge alone, fastify) under the same budget: the ruler
   sut/
     schema.ts           posts (text/textarea/boolean/number/select/email, public reads), authors, global site; samplePost(i)
-    seed.ts             seeds posts, sessions, one client + token in-process; returns the Fixtures the runner reads
+    seed.ts             seeds posts and sessions in-process; returns the Fixtures the runner reads
     server.ts           the SUT: env -> create() -> seed -> createServer(toNodeListener(app)) plus GET /__bench/fixtures and /__bench/stats
     reference.ts        BENCH_REFERENCE=node|bridge|fastify: the same JSON record served by bare node:http, by toNodeListener alone, by fastify
   load/
@@ -40,13 +40,12 @@ src/
       update.ts         PATCH /collections/posts/:id
       insert.ts         POST /collections/posts                                                  [sweep]
       mixed-crud.ts     80% get / 15% list / 5% insert
-      auth-session.ts   GET /collections/posts/:id with Cookie shuri_session                     [sweep]  (auth profile)
-      auth-client.ts    GET /collections/posts/:id with Bearer sct_...                                    (auth profile)
-      login.ts          POST /auth/login at c = 1, 4, 16                                                  (auth profile)
+      auth-session.ts   GET /collections/posts/:id with better-auth's session cookie             [sweep]  (auth profile)
+      login.ts          POST /api/auth/sign-in/email at c = 1, 4, 16                                     (auth profile)
       login-noise.ts    get-record c=32 alone, then with login c=4 in parallel                            (auth profile)
       sse-fanout.ts     N subscribers on /events (--subscribers, default 0/100/1000/5000) under insert c=16; runs last, own boot
   micro/
-    handler.bench.ts        app.handler(new Request(...)) in-process, 10k posts: get/list/insert, session, client token, anonymous
+    handler.bench.ts        app.handler(new Request(...)) in-process, 10k posts: get/list/insert, session, anonymous
     validate-record.bench.ts validateRecord over the six-field posts record
     match.bench.ts          matchesWhere: eq / contains / in / a list of filters
     redact.bench.ts         redactRecord with and without a hidden field
@@ -73,9 +72,11 @@ host (macOS/Linux, N cores)                       container (cpus: 1, mem_limit:
 - **Mongo, when on, is outside the budget** in its own container: the numbers measure the lib over
   a real database, not the database. In local mode the runner still brings it up through compose.
 - **Fixtures come from the SUT, not the public API.** `seed.ts` runs in-process and hands the runner
-  1000 ids, one session cookie, one client token and the login credentials through
-  `GET /__bench/fixtures`. Seeding 1000 sessions through `POST /auth/login` would be 1000 PBKDF2
-  runs (600k iterations each) — minutes on one core; `app.auth.createSession` is a SHA-256 each.
+  1000 ids, one session cookie and the login credentials through `GET /__bench/fixtures`. The auth
+  profile mounts `@shuri/better-auth`: one account signs up through its own route (one scrypt hash,
+  and the response carries the cookie), and the remaining sessions are rows inserted through
+  better-auth's internal adapter — seeding them through sign-in would be 1000 scrypt runs, minutes
+  on one core.
 - **Memory and event loop come from `GET /__bench/stats`** (`process.memoryUsage()` and
   `performance.eventLoopUtilization()`, as a delta since the last sample) in both modes, so
   `rss max MB` means the same thing in docker and local. Both support routes are answered by a
@@ -125,14 +126,15 @@ can run the full sweep.
   of the box, `bridge` is `toNodeListener` around a handler that does nothing, `fastify` is a
   popular framework doing the same — all measured under the same 1-core budget, so they are the
   comparison the public framework benchmarks (multi-core, unspecified hardware) can't be.
-- `auth-session` vs `get-record` is principal resolution: a SHA-256 plus a `findMany` with `eq` on
-  `tokenHash`. `_sessions.tokenHash` is declared `index: true`, so both adapters answer it in
-  O(1); with the index the gap should stay flat as `--sessions` grows.
+- `auth-session` vs `get-record` is principal resolution: better-auth checking the cookie's
+  signature and looking the token up in `session`, a `findMany` with `eq` on `token`.
+  `betterAuthCollections` declares that field `index: true`, so both adapters answer it in O(1);
+  with the index the gap should stay flat as `--sessions` grows.
 - `sse-fanout`: fan-out is synchronous per insert, so insert rps and frames/s are the same loop
   seen twice; `status` names the first level that dropped a subscriber or lost the SUT.
 
 ## Role in the monorepo
 
-Standalone consumer of `@shuri/sdk` (through `@shuri/sdk/node`), `@shuri/store-memory` and
-`@shuri/store-mongo`, like `@shuri/demo` but for measurement. Nothing depends on it. `BASELINE.md`
+Standalone consumer of `@shuri/sdk` (through `@shuri/sdk/node`), `@shuri/better-auth`,
+`@shuri/store-memory` and `@shuri/store-mongo`, like `@shuri/demo` but for measurement. Nothing depends on it. `BASELINE.md`
 is the reference every later change is compared against.

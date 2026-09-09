@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { UserAdminApi } from "@shuri/auth";
 import { resolveAdminAuth } from "../auth/access.js";
 import { asUser, stubSessions } from "../auth/test-support.js";
 import { createAdminUsersHandler } from "./handler.js";
+import type { UserAdminApi } from "./types.js";
 
 const api = { collections: "/collections", globals: "/globals", events: "/events" };
 
@@ -13,8 +13,8 @@ const api = { collections: "/collections", globals: "/globals", events: "/events
 function stubUsers(): UserAdminApi & { calls: string[] } {
   const calls: string[] = [];
   const rows = [
-    { id: "u1", email: "ada@example.com", createdAt: 1 },
-    { id: "u2", email: "alan@example.com", createdAt: 2 },
+    { id: "u1", email: "ada@example.com" },
+    { id: "u2", email: "alan@example.com" },
   ];
 
   return {
@@ -29,7 +29,7 @@ function stubUsers(): UserAdminApi & { calls: string[] } {
     },
     async create(input) {
       calls.push(`create ${input.email}`);
-      return { id: "u3", email: input.email, createdAt: 3 };
+      return { id: "u3", email: input.email };
     },
     async update(id, patch) {
       calls.push(`update ${id} ${Object.keys(patch).join(",")}`);

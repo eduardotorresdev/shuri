@@ -1,10 +1,10 @@
 import type { CollectionSchema } from "@shuri/core";
-import type { UserAdminApi } from "@shuri/auth";
 import { describe, expect, it } from "vitest";
 import { createAdminHandler } from "../handler.js";
 import { asUser, stubSessions } from "../auth/test-support.js";
 import type { AdminAssets } from "../assets/types.js";
 import type { AdminSchema } from "../../shared/schema.js";
+import type { UserAdminApi } from "../users/types.js";
 
 const collections: CollectionSchema[] = [
   {
@@ -32,12 +32,12 @@ describe("the admin with user administration", () => {
     ada: { id: "u1", email: "ada@example.com", role: "editor" },
     bob: { id: "u2", email: "bob@example.com", role: "reader" },
   });
-  /** The one account, standing in for `app.auth.users` — enough to prove the route is wired up. */
+  /** The one account, standing in for an auth implementation's `users` — enough to prove the route is wired up. */
   const usersApi: UserAdminApi = {
-    list: async () => [{ id: "u1", email: "ada@example.com", createdAt: 1 }],
-    get: async (id) => ({ id, email: "ada@example.com", createdAt: 1 }),
-    create: async (input) => ({ id: "u9", createdAt: 9, ...input }),
-    update: async (id) => ({ id, email: "ada@example.com", createdAt: 1 }),
+    list: async () => [{ id: "u1", email: "ada@example.com" }],
+    get: async (id) => ({ id, email: "ada@example.com" }),
+    create: async (input) => ({ id: "u9", ...input }),
+    update: async (id) => ({ id, email: "ada@example.com" }),
     remove: async () => undefined,
   };
   it("advertises the users screens only to a caller who may use them", async () => {
@@ -72,9 +72,7 @@ describe("the admin with user administration", () => {
       asUser("ada", new Request("http://x/admin/api/users")),
     );
     expect(listed?.status).toBe(200);
-    expect(await listed?.json()).toEqual([
-      { id: "u1", email: "ada@example.com", createdAt: 1 },
-    ]);
+    expect(await listed?.json()).toEqual([{ id: "u1", email: "ada@example.com" }]);
     // The bundle answers everything else under `/admin`, so order matters as much as it does for
     // `schema.json`: a users request must not come back as `index.html`.
     expect(listed?.headers.get("content-type")).toContain("application/json");

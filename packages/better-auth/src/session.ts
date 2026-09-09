@@ -1,4 +1,4 @@
-import type { AuthSession, AuthUser } from "@shuri/auth";
+import type { AdminSession, AdminSessionUser } from "@shuri/ui";
 
 /** The slice of a better-auth instance the session shim needs. */
 export interface BetterAuthSessionApi {
@@ -14,56 +14,41 @@ export interface BetterAuthSession {
 }
 
 /**
- * Reshapes a better-auth session into `@shuri/auth`'s `AuthSession`.
+ * Reshapes a better-auth user into the admin's `AdminSessionUser`.
  *
- * That type is the lingua franca the rest of the repo already speaks — `@shuri/ui`'s admin guard
- * takes an `AdminSessionSource` defined in its terms — so mapping here is what lets better-auth drop
- * in with **no change to the admin at all**. `renewed` is always `false`: better-auth manages its own
- * cookie refresh inside `auth.handler`, so there is nothing for a caller to re-emit.
- * @param resolved - What better-auth's `getSession` returned.
- * @returns The session in `@shuri/auth`'s shape.
+ * `name` is pulled out of the spread rather than written over it: better-auth stores an absent name
+ * as `null`, and `AdminSessionUser.name` is `string | undefined`, so spreading first would carry the
+ * `null` straight through and every `user.name ?? user.email` fallback downstream would render it.
+ * @param user - The user as better-auth returned it.
+ * @returns The user in the admin's shape.
  */
-export function toAuthSession(resolved: BetterAuthSession): AuthSession {
+export function toAdminSessionUser(user: BetterAuthSession["user"]): AdminSessionUser {
+  const { name, ...rest } = user;
+  return {
+    ...rest,
+    id: user.id,
+    email: user.email,
+    ...(typeof name === "string" ? { name } : {}),
+  };
+}
+
+/**
+ * Reshapes a better-auth session into the admin's `AdminSession`.
+ *
+ * That type is the lingua franca `@shuri/ui` speaks — its guard takes an `AdminSessionSource`
+ * defined in those terms — so mapping here is what lets better-auth drop in with no change to the
+ * admin at all.
+ * @param resolved - What better-auth's `getSession` returned.
+ * @returns The session in the admin's shape.
+ */
+export function toAdminSession(resolved: BetterAuthSession): AdminSession {
   const { user, session } = resolved;
   const expiresAt =
     session.expiresAt instanceof Date
       ? session.expiresAt.getTime()
       : Date.parse(session.expiresAt);
 
-  // `name` is pulled out of the spread rather than written over it: better-auth stores an absent
-  // name as `null`, and `AuthUser.name` is `string | undefined`, so spreading first would carry the
-  // `null` straight through and every `user.name ?? user.email` fallback downstream would render it.
-  const { name, ...rest } = user;
-
-  return {
-    id: session.id,
-    expiresAt,
-    renewed: false,
-    user: {
-      ...rest,
-      id: user.id,
-      email: user.email,
-      ...(typeof name === "string" ? { name } : {}),
-      // `@shuri/auth`'s `AuthUser` declares `createdAt` as epoch milliseconds and better-auth's is a
-      // serialized date; parsed when it is one, and 0 rather than NaN when it is absent.
-      createdAt: parseCreatedAt(user["createdAt"]),
-    } as AuthUser,
-  };
-}
-
-/**
- * Reads better-auth's `createdAt` as epoch milliseconds.
- * @param value - Whatever better-auth stored, a `Date`, an ISO string, or nothing.
- * @returns The timestamp, or `0` when there is nothing parseable.
- */
-function parseCreatedAt(value: unknown): number {
-  if (value instanceof Date) return value.getTime();
-  if (typeof value === "number") return value;
-  if (typeof value === "string") {
-    const parsed = Date.parse(value);
-    return Number.isNaN(parsed) ? 0 : parsed;
-  }
-  return 0;
+  return { id: session.id, expiresAt, user: toAdminSessionUser(user) };
 }
 
 /**
@@ -73,9 +58,9 @@ function parseCreatedAt(value: unknown): number {
  */
 export function toSessionResolver(
   auth: BetterAuthSessionApi,
-): (request: Request) => Promise<AuthSession | undefined> {
+): (request: Request) => Promise<AdminSession | undefined> {
   return async function getSession(request) {
     const resolved = await auth.api.getSession({ headers: request.headers });
-    return resolved ? toAuthSession(resolved) : undefined;
+    return resolved ? toAdminSession(resolved) : undefined;
   };
 }

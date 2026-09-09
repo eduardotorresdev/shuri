@@ -1,5 +1,4 @@
 import type { Scenario } from "./index.ts";
-import { authClient } from "./auth-client.ts";
 import { authSession } from "./auth-session.ts";
 import { getGlobal } from "./get-global.ts";
 import { getRecord } from "./get-record.ts";
@@ -30,7 +29,6 @@ export const scenarios: readonly Scenario[] = [
   insert,
   mixedCrud,
   authSession,
-  authClient,
   login,
   loginNoise,
   sseFanout,

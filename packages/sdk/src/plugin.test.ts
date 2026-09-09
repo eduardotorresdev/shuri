@@ -1,6 +1,12 @@
 import type { CollectionSchema } from "@shuri/core";
 import { describe, expect, it } from "vitest";
-import { collectPluginCollections, PluginSlugCollisionError } from "./plugin.js";
+import {
+  collectPluginAccess,
+  collectPluginCollections,
+  collectPluginOpenApi,
+  PluginPrincipalConflictError,
+  PluginSlugCollisionError,
+} from "./plugin.js";
 
 const collection = (slug: string): CollectionSchema => ({
   slug,
@@ -51,5 +57,47 @@ describe("collectPluginCollections", () => {
         new Set(),
       ),
     ).toThrow(/Plugin "b"/);
+  });
+});
+
+const principal = async () => ({ kind: "anonymous" as const });
+
+describe("collectPluginAccess", () => {
+  it("is nothing when no plugin authenticates, so every route stays open", () => {
+    expect(collectPluginAccess([{ name: "a" }])).toBeUndefined();
+  });
+
+  it("is the one plugin's resolver", () => {
+    expect(collectPluginAccess([{ name: "a" }, { name: "auth", principal }])).toEqual({
+      principal,
+    });
+  });
+
+  it("refuses two resolvers, naming both plugins", () => {
+    const collide = () =>
+      collectPluginAccess([
+        { name: "first", principal },
+        { name: "second", principal },
+      ]);
+
+    expect(collide).toThrow(PluginPrincipalConflictError);
+    expect(collide).toThrow(/"first" and "second"/);
+  });
+});
+
+describe("collectPluginOpenApi", () => {
+  it("unions the path items and keeps the authenticating plugin's security", () => {
+    const security = { schemes: {}, requirements: () => [] };
+
+    expect(
+      collectPluginOpenApi([
+        { name: "a", openapi: { paths: { "/a": {} } } },
+        { name: "b", openapi: { paths: { "/b": {} }, security } },
+      ]),
+    ).toEqual({ paths: { "/a": {}, "/b": {} }, security });
+  });
+
+  it("is empty when no plugin contributes", () => {
+    expect(collectPluginOpenApi([{ name: "a" }])).toEqual({});
   });
 });

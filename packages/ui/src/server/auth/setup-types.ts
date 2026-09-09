@@ -10,7 +10,7 @@ export interface AdminSetupCredentials {
  *
  * Two functions rather than one, because the admin has to answer two different questions at two
  * different times: "should I show the setup form at all?" on every schema read, and "create this
- * account" once. `@shuri/better-auth` ships an implementation; a host on `@shuri/auth` writes both in
+ * account" once. `@shuri/better-auth` ships an implementation; a host with its own auth writes both in
  * a few lines.
  */
 export interface AdminSetupSource {

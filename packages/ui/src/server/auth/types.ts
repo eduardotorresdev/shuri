@@ -1,51 +1,70 @@
-import type { AuthSession, UserAdminApi } from "@shuri/auth";
 import type { AdminSetupOptions } from "./setup-types.js";
+import type { UserAdminApi } from "../users/types.js";
 
 /**
- * The one thing the admin needs from `@shuri/auth`: resolving the session behind a request.
- * `@shuri/sdk`'s `app.auth` satisfies it structurally, so nothing has to be adapted at the call
- * site, and a host with its own session scheme can satisfy it too.
+ * The user behind a session, as the admin sees it: the two fields it shows, plus whatever else the
+ * auth implementation carries — a `role`, most usefully, which is what `authorize` reads.
+ */
+export interface AdminSessionUser {
+  id: string;
+  email: string;
+  name?: string;
+  [field: string]: unknown;
+}
+
+/** A live session, resolved from a request by the auth implementation. */
+export interface AdminSession {
+  id: string;
+  user: AdminSessionUser;
+  /** Epoch milliseconds. */
+  expiresAt: number;
+}
+
+/**
+ * The one thing the admin needs from an auth implementation: resolving the session behind a
+ * request. `@shuri/better-auth`'s `sessionSource` satisfies it, and so can a host with its own
+ * session scheme — the shape is deliberately the admin's, not any one library's.
  */
 export interface AdminSessionSource {
-  getSession(request: Request): Promise<AuthSession | undefined>;
+  getSession(request: Request): Promise<AdminSession | undefined>;
   /**
-   * User administration, when the auth implementation has any. `app.auth` carries it, so passing
-   * that is all it takes to get the Users screens; an implementation without it simply doesn't get
-   * them, and nothing else changes.
+   * User administration, when the auth implementation has any. `@shuri/better-auth`'s session
+   * source carries it, so passing that is all it takes to get the Users screens; an implementation
+   * without it simply doesn't get them, and nothing else changes.
    */
   users?: UserAdminApi;
 }
 
 export interface AdminAuthOptions {
-  /** Resolves each request's session — `app.auth` from `@shuri/sdk`. */
+  /** Resolves each request's session — `ba.sessionSource` from `@shuri/better-auth`. */
   auth: AdminSessionSource;
   /**
    * Prefix the auth routes are mounted under. Must match the auth implementation's own. Defaults to
-   * "/auth", which is `@shuri/auth`'s.
+   * "/api/auth", which is better-auth's.
    */
   basePath?: string;
   /**
-   * Full path the login form posts `{ email, password }` to. Defaults to `{basePath}/login`, which
-   * is `@shuri/auth`'s; `@shuri/better-auth` serves `{basePath}/sign-in/email`.
+   * Full path the login form posts `{ email, password }` to. Defaults to
+   * `{basePath}/sign-in/email`, which is better-auth's.
    */
   signInPath?: string;
-  /** Full path the sign-out button posts to. Defaults to `{basePath}/logout`. */
+  /** Full path the sign-out button posts to. Defaults to `{basePath}/sign-out`. */
   signOutPath?: string;
   /**
-   * OIDC provider ids to offer as sign-in buttons, matching the ids declared in `AuthConfig
-   * .providers`. Listed here rather than discovered, because a host may well want only some of its
+   * Social provider ids to offer as sign-in buttons, matching the ids the auth implementation
+   * declares. Listed here rather than discovered, because a host may well want only some of its
    * providers on the admin's login screen.
    */
   providers?: readonly string[];
   /**
    * Decides whether a signed-in user may use the admin. Defaults to accepting any session.
    *
-   * This is the whole of the admin's authorization story, on purpose: `@shuri/auth` has no roles,
-   * and inventing some here would put a second, weaker permission model next to whatever the host
-   * already has. **With the default, anyone who can sign up can edit everything** — an app with open
-   * signup wants something like `(session) => session.user["role"] === "editor"`.
+   * This is the whole of the admin's authorization story, on purpose: inventing roles here would
+   * put a second, weaker permission model next to whatever the host already has. **With the
+   * default, anyone who can sign up can edit everything** — an app with open signup wants something
+   * like `(session) => session.user["role"] === "admin"`.
    */
-  authorize?: (session: AuthSession) => boolean | Promise<boolean>;
+  authorize?: (session: AdminSession) => boolean | Promise<boolean>;
   /**
    * Which requests require an authorized session. Defaults to `writesToApi` — every write to the
    * REST routes the admin edits through.
@@ -57,7 +76,7 @@ export interface AdminAuthOptions {
   protect?: (request: Request) => boolean;
   /**
    * The Users screens: listing, creating, editing and deleting accounts. Defaults to `auth.users`,
-   * so an app on `@shuri/auth` gets them by passing `app.auth`.
+   * so an app on `@shuri/better-auth` gets them by passing its session source.
    *
    * They sit behind `authorize` like everything else in the admin, which is worth saying out loud:
    * **whoever may use the admin may mint an account** — and with the default `authorize`, an account

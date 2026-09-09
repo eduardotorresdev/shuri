@@ -71,8 +71,9 @@ describe("createAdminSchemaHandler with auth", () => {
     const document = await read(withAuth());
 
     expect(document.viewer).toEqual({ status: "anonymous" });
-    expect(document.auth?.basePath).toBe("/auth");
-    expect(document.auth?.signIn).toBe("/auth/login");
+    // The resolved options win over the document's own literal, defaults included.
+    expect(document.auth?.basePath).toBe("/api/auth");
+    expect(document.auth?.signIn).toBe("/api/auth/sign-in/email");
     expect(document.collections).toEqual([]);
     expect(document.globals).toEqual([]);
   });
