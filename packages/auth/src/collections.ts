@@ -1,10 +1,13 @@
 import type { CollectionSchema } from "@shuri/core";
 
 /**
- * The user record. `internal: true` by default because, until per-collection rules land, a served
- * `users` collection is an open directory of every registered email — `hidden` removes a field from
- * a response, it doesn't hide the rows. A host that wants it served opts out in one line:
- * `create({ collections: [{ ...usersCollection, internal: false }, ...] })`.
+ * The user record. `internal: true`, and there is no opt-out: until per-collection rules land, a
+ * served `users` collection is an open directory of every registered email — `hidden` removes a
+ * field from a response, it doesn't hide the rows. (`create()` reserves the slug too, so a host
+ * cannot re-declare it as servable: see `assertNoAuthSlugCollision`.)
+ *
+ * Reading and writing users is `AuthApi.users` (`users/admin.ts`), behind whatever authenticated
+ * route the host puts it — which is what `@shuri/ui`'s Users screens are.
  *
  * `passwordHash` is `hidden` (never leaves, never writable over HTTP) and deliberately **not**
  * `required`: a field that is both would make the collection impossible to create through REST, and

@@ -90,7 +90,7 @@ describe("toNodeListener", () => {
   });
 
   it("streams a multi-chunk body without waiting for the end", async () => {
-    let release: () => void = () => undefined;
+    let release!: () => void;
     const listener = toNodeListener({
       handler: async () => {
         const encoder = new TextEncoder();

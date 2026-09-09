@@ -37,6 +37,26 @@ export class EmailAlreadyRegisteredError extends ApiError {
   }
 }
 
+/**
+ * Administration asked for a user that isn't there. Unlike every other error in this file this one
+ * *does* tell a caller what exists — which is fine: it is only reachable from behind the admin's own
+ * gate, where the caller may list every user anyway.
+ */
+export class UserNotFoundError extends ApiError {
+  constructor(id: string) {
+    super(404, `No user with id "${id}"`);
+    this.name = "UserNotFoundError";
+  }
+}
+
+/** A user created or updated through administration has a malformed body. */
+export class InvalidUserError extends IssuesApiError {
+  constructor(issues: Issue[]) {
+    super(400, issues);
+    this.name = "InvalidUserError";
+  }
+}
+
 /** The signup/login payload is malformed (missing email, password too short, ...). */
 export class InvalidCredentialsError extends IssuesApiError {
   constructor(issues: Issue[]) {

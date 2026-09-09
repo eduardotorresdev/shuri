@@ -1,0 +1,4 @@
+{
+  "extends": ["../config/oxlintrc.base.json"],
+  "ignorePatterns": ["dist/**", "build/**", ".svelte-kit/**"]
+}

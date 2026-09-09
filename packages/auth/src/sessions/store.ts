@@ -25,6 +25,12 @@ export interface SessionService {
    */
   resolve(token: string): Promise<AuthSession | undefined>;
   revoke(token: string): Promise<void>;
+  /**
+   * Revokes every session a user holds, and reports how many. What "delete this user" needs before
+   * the row goes: `resolve` does drop a session whose owner has vanished, but only when that session
+   * is next used, and until then the rows sit there as credentials nobody can see to revoke.
+   */
+  revokeAllForUser(userId: RecordId): Promise<number>;
   pruneExpired(): Promise<number>;
 }
 
@@ -118,6 +124,14 @@ export function createSessionService(config: SessionServiceConfig): SessionServi
     async revoke(token) {
       const record = await findByToken(token);
       if (record) await sessions.delete(record.id);
+    },
+
+    async revokeAllForUser(userId) {
+      const owned = await sessions.findMany({
+        where: { user: { op: "eq", value: userId } },
+      });
+      for (const record of owned) await sessions.delete(record.id);
+      return owned.length;
     },
 
     async pruneExpired() {

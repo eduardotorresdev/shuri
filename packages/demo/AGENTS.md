@@ -8,7 +8,8 @@ stack, standalone rather than a dependency of other packages.
 
 ```
 src/
-  server.ts                   entry point: builds the app, registers hooks, seeds data, runs the auth walkthrough, serves, subscribes
+  server.ts                   entry point: builds the app, mounts the admin, registers hooks, seeds data, runs the auth walkthrough, serves, subscribes
+  better-auth-server.ts        the same app with @shuri/better-auth in place of @shuri/auth
   auth-walkthrough.ts          signup -> me -> logout -> login -> token, through @shuri/client bound to app.handler
   collections.ts               example schema: posts (with a schema-declared hook), authors
   globals.ts                    example schema: site, seoDefaults
@@ -50,3 +51,15 @@ const satisfies`) showing the field types available (`text`, `textarea`, `email`
 
 Proof that `@shuri/sdk` and `@shuri/client` work end to end on a real (if minimal) HTTP server.
 Useful as a template for wiring the toolkit into any other engine.
+
+It is also the only consumer of `@shuri/ui`: `server.ts` mounts the admin at `/admin` through
+`handlers` — as a **function**, so the admin can be handed the `AuthApi` that same call builds — and
+authorizes one seeded account by email, since `@shuri/auth`'s `users` declares no role field. Any
+other account (signup is open) reaches the admin and is told it has no access. Writes to
+`/collections` and `/globals` are refused without that session; **reads stay public**, which is
+`@shuri/ui`'s default and what makes the API still headless.
+
+`pnpm --filter @shuri/demo start:better-auth` runs **better-auth-server.ts** instead: the same
+collections, globals and admin, with `@shuri/better-auth` swapped in for `@shuri/auth`. It seeds no
+account and carries no password in source — the first visit shows the setup form, and whoever
+completes it becomes the administrator. Set `SHURI_SETUP_TOKEN` to gate that form.

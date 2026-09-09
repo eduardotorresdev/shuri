@@ -1,5 +1,9 @@
 # @shuri/auth
 
+> An alternative exists: `@shuri/better-auth` runs [better-auth](https://better-auth.com) on the same
+> store, trading this package's zero dependencies for email verification, password reset, 2FA and
+> roles. An app picks one.
+
 Authentication for a Shuri app: signup, login, logout and current-session by email and password, plus
 sign-in through OIDC providers the host declares — either a fully static config, or a `{ id, preset }`
 slot (Google and Microsoft ship as presets) whose `clientId`/`clientSecret`/`redirectUri` an admin
@@ -47,17 +51,19 @@ src/
     routes.ts                     matchAuthRoute
   sessions/
     tokens.ts                    issueSessionToken/hashSessionToken
-    store.ts                      createSessionService: create/resolve/revoke/pruneExpired
+    store.ts                      createSessionService: create/resolve/revoke/revokeAllForUser/pruneExpired
     cookie.ts                     createSessionCookies: issue/clear/read
   users/
-    service.ts                   findByEmail/findById/create/update, normalizeEmail
+    service.ts                   findByEmail/findById/findMany/create/update/delete, normalizeEmail
     public.ts                     toPublicUser — whitelists from the schema
   clients/
     validators.ts                assertValidClientsConfig (roles -> scope patterns), assertKnownRoles
     service.ts                    createClientService: create/list/get/findByClientId/revoke/rotateSecret/verify/allowedScopes
     tokens.ts                     createClientTokenService: issue/resolve/pruneExpired; CLIENT_TOKEN_PREFIX
+    admin.ts                       createUserAdmin -> UserAdminApi: users as an operator sees them
+    validate.ts                     parseNewUser/parseUserPatch
   credentials/
-    validators.ts                parseCredentials
+    validators.ts                parseCredentials, and the field rules it and users/validate share
     signup.ts                     signUp + CredentialsContext
     login.ts                      signIn, with the equal-cost dummy hash
   oidc/
@@ -114,14 +120,15 @@ contract `@shuri/api`'s handlers follow.
 - **collections.ts** — `users`, `_sessions` and `_accounts`, all `internal: true`, with
   `users.passwordHash` also `hidden`. `users` is internal **by default** because without
   per-collection rules a served `users` is an open directory of every registered address — `hidden`
-  removes a _field_ from a response, it doesn't hide _rows_. The host opts out in one line:
-  `create({ collections: [{ ...usersCollection, internal: false }, ...] })`. `passwordHash` is
+  removes a _field_ from a response, it doesn't hide _rows_. There is no opt-out: `create()` reserves
+  the slug as well, so a host cannot re-declare it as servable. Reading and writing users goes
+  through `AuthApi.users` (`users/admin.ts`) instead, behind an authenticated route of the host's own
+  — which is what `@shuri/ui`'s Users screens are. `passwordHash` is
   deliberately not `required`: a field that is both `hidden` and `required` makes a collection
   impossible to create over REST, and an OIDC-only user has no password at all. Every instant is a
   `number` (epoch ms), not an ISO string, because the memory adapter compares strings with
   `localeCompare` — locale-dependent collation — while numbers take the exact `a - b` branch.
-  Exported individually so a host can extend one (`{ ...usersCollection, fields: [...] }`) instead of
-  forking the package. `_oidc_credentials` is the fourth: one row per `OidcProviderSlot`'s `provider`
+  `_oidc_credentials` is the fourth: one row per `OidcProviderSlot`'s `provider`
   id, holding what a preset needs to run (`clientId`/`clientSecret`/`redirectUri`, plus `tenant` for
   `microsoft`). Also `internal: true`, for the same reason `users` is — there's no RBAC yet, so a
   served `_oidc_credentials` would hand out every configured `clientId` (and, absent `hidden` on
@@ -158,6 +165,17 @@ contract `@shuri/api`'s handlers follow.
   `@shuri/sdk` hands both to `createOpenApiHandler`'s `paths`/`security`.
 - **principal.ts** — `resolvePrincipal` never throws: it answers `ANONYMOUS` for no credential and
   for one that doesn't resolve alike. Whether anonymous is enough is the policy's call.
+- **users/admin.ts** — `AuthApi.users`: list, get, create, update, remove, as an _operator_ does it.
+  Deliberately not `signUp` with a flag: signing up is self-registration, so it demands a password
+  and hands back a live session, and creating somebody else's account through it would mint a
+  session nobody asked for. Here a password is optional (an OIDC-only user has none) and, when
+  given, is hashed by the same `PasswordHasher` — `passwordHash` is never accepted from a body, and
+  a body that carries one is refused rather than silently ignored. Changing a password
+  **revokes every session the user holds**: a reset that leaves the old cookies working resets
+  nothing. Removing a user takes their sessions and their `_accounts` links with them, in that order
+  — the reverse would leave, for an instant, sessions whose owner is gone. Issues are rooted at the
+  field (`password`, not `body.password`), because the admin's form indexes them by first path
+  segment to put each message under its own input.
 - **oidc/config.ts + oidc/credentials.ts — two ways to declare a provider.** A fully static
   `OidcProviderConfig` (own `clientId`/`clientSecret`/`redirectUri`) is validated and resolved once at
   boot by `oidcProvider`, exactly as before. A `OidcProviderSlot` (`{ id, preset }`) is validated at
@@ -280,8 +298,9 @@ nothing here depends on `@shuri/sdk`, and the dependency order stays
 - **Email verification and password reset** — both need an email-sending port. Their absence is why
   signup's 409 still reveals that an address is registered: closing that leak means always answering
   201 and mailing a notice.
-- **Sign out everywhere** — cheap when wanted:
-  `findMany({ where: { user: { op: "eq", value: userId } } })` and delete.
+- **Sign out everywhere, as a route.** The mechanism exists — `SessionService.revokeAllForUser`,
+  which a password change through `AuthApi.users` already uses — but no route or self-service action
+  exposes it.
 - **JWKS / RS256 verification** — unnecessary under direct exchange, as above.
 - **An Apple preset** — Apple's "client secret" isn't a stored string: it's a JWT signed ES256 with a
   Team ID, a Key ID and a private key, expiring and needing rotation. Neither `_oidc_credentials`

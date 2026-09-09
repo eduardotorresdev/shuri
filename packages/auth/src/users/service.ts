@@ -1,4 +1,10 @@
-import type { CollectionStore, RecordId, RecordInput, StoreRecord } from "@shuri/store";
+import type {
+  CollectionStore,
+  Query,
+  RecordId,
+  RecordInput,
+  StoreRecord,
+} from "@shuri/store";
 import type { Now } from "../types.js";
 
 export interface CreateUserInput {
@@ -12,8 +18,15 @@ export interface CreateUserInput {
 export interface UserService {
   findByEmail(email: string): Promise<StoreRecord<RecordInput> | undefined>;
   findById(id: RecordId): Promise<StoreRecord<RecordInput> | undefined>;
+  /** A page of users, for administration. The only read here that isn't looking for one row. */
+  findMany(query?: Query): Promise<StoreRecord<RecordInput>[]>;
   create(input: CreateUserInput): Promise<StoreRecord<RecordInput>>;
   update(id: RecordId, data: RecordInput): Promise<StoreRecord<RecordInput>>;
+  /**
+   * Deletes the row and nothing else. Cascading to sessions and links is `users/admin.ts`'s job,
+   * which is the only caller: this service stays one collection wide, as the rest of it is.
+   */
+  delete(id: RecordId): Promise<void>;
 }
 
 /**
@@ -52,6 +65,8 @@ export function createUserService(
 
     findById: (id) => collection.findOne(id),
 
+    findMany: (query) => collection.findMany(query),
+
     create(input) {
       return collection.insert({
         email: normalizeEmail(input.email),
@@ -63,5 +78,7 @@ export function createUserService(
     },
 
     update: (id, data) => collection.update(id, data),
+
+    delete: (id) => collection.delete(id),
   };
 }

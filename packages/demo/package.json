@@ -6,13 +6,16 @@
   "scripts": {
     "start": "node --watch src/server.ts",
     "typecheck": "tsgo --noEmit -p tsconfig.json",
-    "lint": "oxlint"
+    "lint": "oxlint",
+    "start:better-auth": "node --watch src/better-auth-server.ts"
   },
   "dependencies": {
     "@shuri/client": "workspace:*",
+    "@shuri/better-auth": "workspace:*",
     "@shuri/core": "workspace:*",
     "@shuri/sdk": "workspace:*",
-    "@shuri/store-memory": "workspace:*"
+    "@shuri/store-memory": "workspace:*",
+    "@shuri/ui": "workspace:*"
   },
   "devDependencies": {
     "@shuri/config": "workspace:*",

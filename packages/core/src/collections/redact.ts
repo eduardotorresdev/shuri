@@ -1,3 +1,4 @@
+import type { Field } from "./fields.js";
 import type { CollectionSchema } from "./types.js";
 import type { RecordInput, RecordSchema } from "./validate-record.js";
 
@@ -69,4 +70,20 @@ export function servableCollections(
   collections: readonly CollectionSchema[],
 ): readonly CollectionSchema[] {
   return collections.filter((collection) => !collection.internal);
+}
+
+/**
+ * The fields of `schema` that may leave through HTTP, i.e. every one not declared `hidden`.
+ *
+ * The list-shaped counterpart to `redactRecord`: that one applies `hidden` to a value, this one
+ * applies it to the schema describing that value — what a document generated from the fields (the
+ * OpenAPI schema, an admin form) is allowed to mention. Returns the original array untouched when
+ * nothing is hidden, since there is nothing to filter away.
+ * @param schema - The collection or global schema to read the flags off.
+ * @returns The non-hidden fields, in declaration order.
+ */
+export function visibleFields(schema: RecordSchema): readonly Field[] {
+  const hidden = hiddenFieldNames(schema);
+  if (hidden.size === 0) return schema.fields;
+  return schema.fields.filter((field) => !hidden.has(field.name));
 }

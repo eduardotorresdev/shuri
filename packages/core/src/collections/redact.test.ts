@@ -5,6 +5,7 @@ import {
   redactRecord,
   redactRecords,
   servableCollections,
+  visibleFields,
 } from "./redact.js";
 
 const accountsSchema: CollectionSchema = {
@@ -101,5 +102,17 @@ describe("servableCollections", () => {
     expect(servableCollections([accountsSchema, sessionsSchema])).toEqual([
       accountsSchema,
     ]);
+  });
+});
+
+describe("visibleFields", () => {
+  it("drops the hidden fields and keeps the rest in declaration order", () => {
+    expect(visibleFields(accountsSchema)).toEqual([
+      { type: "email", name: "email", required: true },
+    ]);
+  });
+
+  it("returns the declared array itself when nothing is hidden", () => {
+    expect(visibleFields(sessionsSchema)).toBe(sessionsSchema.fields);
   });
 });

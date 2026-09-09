@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   boolean,
+  email,
   func,
   matches,
   maxLength,
@@ -129,5 +130,38 @@ describe("func", () => {
     expect(validate(1, func("bad hook"), "value")).toEqual([
       { path: "value", message: "bad hook" },
     ]);
+  });
+});
+
+describe("email", () => {
+  it("accepts an ordinary address", () => {
+    expect(validate("ada@example.com", email(), "value")).toEqual([]);
+    expect(validate("ada+tag@sub.example.co.uk", email(), "value")).toEqual([]);
+  });
+
+  it("rejects the shapes a typo produces", () => {
+    for (const value of [
+      "ada",
+      "ada@",
+      "@example.com",
+      "ada@example",
+      "ada example.com",
+    ]) {
+      expect(validate(value, email(), "value")).toHaveLength(1);
+    }
+  });
+
+  it("rejects a value with a space, which a pasted sentence has", () => {
+    expect(validate("ada@example.com and more", email(), "value")).toHaveLength(1);
+  });
+
+  it("leaves a non-string to `string()`, so the two report one issue between them", () => {
+    expect(validate(42, email(), "value")).toEqual([]);
+  });
+
+  it("reports the caller's message when given one", () => {
+    expect(validate("nope", email("bad address"), "value")[0]?.message).toBe(
+      "bad address",
+    );
   });
 });
