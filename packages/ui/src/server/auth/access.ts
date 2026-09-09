@@ -27,6 +27,8 @@ export interface ResolvedAdminAuth {
   advertised(): Promise<AdminAuth>;
   resolve(request: Request): Promise<AdminAccess>;
   protect(request: Request): boolean;
+  /** Requests the guard leaves to the API's own access rules, `protect` notwithstanding. */
+  exempt(request: Request): boolean;
   /** The resolved first-run flow, when the host declared one. */
   setup?: ResolvedAdminSetup;
 }
@@ -56,6 +58,7 @@ export function resolveAdminAuth(
 ): ResolvedAdminAuth {
   const authorize = options.authorize ?? (() => true);
   const protect = options.protect ?? writesToApi(api);
+  const exempt = options.exempt ?? (() => false);
   const basePath = options.basePath ?? "/api/auth";
   const setup = options.setup
     ? resolveAdminSetup(options.setup, adminBasePath)
@@ -70,6 +73,7 @@ export function resolveAdminAuth(
 
   return {
     protect,
+    exempt,
     setup,
 
     async advertised() {

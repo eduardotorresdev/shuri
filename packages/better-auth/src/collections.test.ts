@@ -1,5 +1,6 @@
 import type { CollectionSchema, Field } from "@shuri/core";
 import { defineCollections } from "@shuri/core";
+import { apiKey } from "@better-auth/api-key";
 import { describe, expect, it } from "vitest";
 import { betterAuthCollections } from "./collections.js";
 
@@ -81,5 +82,17 @@ describe("betterAuthCollections indexes", () => {
     expect(fieldOf("user", "email")?.index).toBe(true);
     expect(fieldOf("account", "userId")?.index).toBe(true);
     expect(fieldOf("user", "name")?.index).toBeUndefined();
+  });
+});
+
+describe("betterAuthCollections with @better-auth/api-key", () => {
+  it("adds the key table, internal, with the hash hidden and indexed", () => {
+    const collections = betterAuthCollections({ plugins: [apiKey()] });
+    const table = collections.find((entry) => entry.slug === "apikey");
+    const key = table?.fields.find((f) => f.name === "key");
+
+    expect(table?.internal).toBe(true);
+    expect(key).toMatchObject({ hidden: true, index: true });
+    expect(table?.fields.find((f) => f.name === "referenceId")?.index).toBe(true);
   });
 });

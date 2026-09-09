@@ -8,7 +8,10 @@ import type { CollectionSchema, GlobalSchema } from "@shuri/core";
 import type { Store } from "@shuri/store";
 
 /**
- * What a plugin receives once `create()` has built everything: the store its collections live in.
+ * What a plugin receives once `create()` has built everything: the store its collections live in,
+ * and the app's own schema — what a plugin deriving something from the served surface (the scopes
+ * an API key may be granted, say) reads. The plugins' own tables are not in it: they are internal
+ * and off HTTP, so there is nothing about them a client could be granted.
  *
  * The store is handed to plugins but stays off `ShuriApp`, which deliberately stopped exposing it.
  * The difference is who is holding it: a plugin is part of the composition and needs the store to do
@@ -19,6 +22,10 @@ export interface PluginContext<
   G extends readonly GlobalSchema[] = GlobalSchema[],
 > {
   store: Store<T, G>;
+  /** The collections the app declared, as declared. */
+  collections: readonly CollectionSchema[];
+  /** The globals the app declared. */
+  globals: readonly GlobalSchema[];
 }
 
 /**

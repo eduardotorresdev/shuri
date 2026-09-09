@@ -62,8 +62,10 @@ paths? })`. The one type parameter is the app's own `{ collections, globals }`
   `signup` supplies the address as `name` when none was given, since better-auth requires one;
   `me()` turns better-auth's `null`-with-200 into the 401 every other route answers; `logout`
   forgets the jar. `socialSignInUrl` posts to `sign-in/social` and hands back the URL — a social
-  sign-in is a browser navigation, not a fetch. `setToken` exists for a host running better-auth's
-  `bearer` plugin, or a scheme of its own.
+  sign-in is a browser navigation, not a fetch. `setToken` (or `createClient({ token })`) is how a
+  script acts as a machine: an API key minted by `@shuri/better-auth` (`ba.apiKeys.create`) goes
+  out as `Authorization: Bearer`, the server resolves a `client` principal with the key's scopes —
+  no signup, no cookie — and `me()` answers 401, because a key is not a session.
 - **realtime/subscribe.ts** — `fetch` rather than `EventSource`, on purpose: `EventSource` can't
   send an `Authorization` header, and a bearer-authenticated client (a Node script, a mobile app)
   needs exactly that. Opens `GET {events}?collection=…&global=…&id=…&events=…` with `accept:

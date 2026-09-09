@@ -33,13 +33,18 @@ src/
   and `site` declares `access: { read: () => true }`: reads stay public, writes take a login.
   `seoDefaults` declares nothing, so anonymous gets 401 on it — a useful contrast to poke at.
 - **server.ts** — builds `betterAuthPlugin({ options, setup })` (plain-HTTP cookies, a `role`
-  column declared through `additionalFields` so it reaches the session, and `setup.fields` stamping
+  column declared through `additionalFields` so it reaches the session, `@better-auth/api-key`
+  among the plugins, and `setup.fields` stamping
   `role: "admin"` on whoever completes the first-run form), then calls `create({ collections,
 globals, adapter, plugins })` with the plugin and the admin beside it — `authorize` reads that
   role back, so signup stays open while only the administrator edits. Registers the runtime hooks
   (before the seed, so booting already exercises them), seeds one author and one post plus the
   `site` global, seeds the administrator by completing the setup flow on the boot's behalf
-  (`ba.setupSource.create`, the same route the form posts to), runs the walkthrough, then serves it
+  (`ba.setupSource.create`, the same route the form posts to), mints an API key owned by that
+  administrator but scoped to `posts` only (`ba.apiKeys.create`) and prints a `curl` carrying it —
+  a script holding it writes posts and gets 403 on `site`, however privileged its owner, and
+  `exempt: ba.carriesApiKey` keeps the admin's guard out of its way — runs the walkthrough, then
+  serves it
   with `createServer(toNodeListener(app)).listen(port)` — `toNodeListener` comes from
   `@shuri/sdk/node`, the bridge between Node's callback-style `http` and the web-standard
   `app.handler` — and logs the admin/auth/collections/globals/OpenAPI/docs URLs plus a

@@ -5,6 +5,7 @@ allowBuilds:
   esbuild: true
   mongodb-memory-server: true
 minimumReleaseAgeExclude:
+  - "@better-auth/api-key@1.7.3"
   - "@better-auth/core@1.7.3"
   - "@better-auth/drizzle-adapter@1.7.3"
   - "@better-auth/kysely-adapter@1.7.3"

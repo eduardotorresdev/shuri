@@ -1,4 +1,5 @@
 export * from "./adapter/index.js";
+export * from "./api-key.js";
 export * from "./collections.js";
 export * from "./errors.js";
 export * from "./handler.js";

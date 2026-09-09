@@ -40,7 +40,7 @@ src/
   5. Builds `app.handler` by calling `createHandler` (`@shuri/api`), which composes the collections,
      globals, event stream and OpenAPI handlers — the ordering and the base-path forwarding live
      there, so this package only forwards the per-handler options it was given. `config.handlers`
-     go in first, then every plugin's handlers (resolved with the store), through `options.handlers`,
+     go in first, then every plugin's handlers (resolved with the store and the app's own schema — `PluginContext.collections`/`globals`, what `@shuri/better-auth` derives the scope universe an API key may be granted from), through `options.handlers`,
      which prepends them; the one plugin declaring a `principal` goes in through `options.access`,
      which is what turns the `access` rules of every collection and global on; and every plugin's
      `openapi` (`paths`/`security`) through `options.openapi`, so `/openapi.json` describes the

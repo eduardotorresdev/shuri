@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createClient } from "../create.js";
 import { ClientError } from "../errors.js";
 import { createTestApp, credentials } from "./support.js";
 
@@ -58,5 +59,36 @@ describe("client.auth", () => {
     expect(client.auth.getToken()).toBe("abc");
     client.auth.clearToken();
     expect(client.auth.getToken()).toBeUndefined();
+  });
+});
+
+describe("client.auth as a machine", () => {
+  it("acts as the client behind an API key set as the bearer, within its scopes", async () => {
+    const { app, client, auth } = createTestApp({ auth: true });
+    if (!auth) throw new Error("auth: true hands the plugin back");
+    const { user } = await client.auth.signup(credentials);
+    const issued = await auth.apiKeys.create({
+      name: "ci",
+      userId: user.id,
+      permissions: { posts: ["list", "create"] },
+    });
+
+    // A second client, holding the key and nothing else: no cookie, no signup, no session.
+    const bot = createClient<typeof app.schema>({
+      baseUrl: "http://localhost",
+      fetch: (input, init) => app.handler(new Request(input, init)),
+      token: issued.key,
+    });
+
+    expect((await bot.collections.posts.create({ title: "By bot" })).title).toBe(
+      "By bot",
+    );
+    expect((await bot.collections.posts.list()).map((post) => post.title)).toEqual([
+      "By bot",
+    ]);
+    // Not in its permissions: refused as a known client, not as nobody.
+    await expect(bot.globals.site.get()).rejects.toMatchObject({ status: 403 });
+    // A key is not a session: `me()` has nothing to answer with.
+    await expect(bot.auth.me()).rejects.toMatchObject({ status: 401 });
   });
 });

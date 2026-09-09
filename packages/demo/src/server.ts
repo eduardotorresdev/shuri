@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { apiKey } from "@better-auth/api-key";
 import { betterAuthPlugin } from "@shuri/better-auth";
 import { createClient } from "@shuri/client";
 import { create } from "@shuri/sdk";
@@ -35,6 +36,9 @@ const ba = betterAuthPlugin({
     },
     // Plain HTTP: a Secure cookie is never stored by a browser talking to http://localhost.
     advanced: { useSecureCookies: false },
+    // Machine-to-machine: a request carrying a key (`x-api-key`, or a bearer) acts as a `client`
+    // principal with exactly the scopes the key's permissions name — see the seed below.
+    plugins: [apiKey()],
   },
   // Whoever completes setup becomes the administrator; `authorize` reads exactly this back.
   setup: { fields: { role: "admin" } },
@@ -59,6 +63,9 @@ const app = create({
               auth: ba.sessionSource,
               basePath: ba.basePath,
               authorize: (session) => session.user["role"] === "admin",
+              // A request holding an API key is not the guard's to refuse: `@shuri/api` judges it
+              // by the key's scopes, and the guard only speaks sessions.
+              exempt: ba.carriesApiKey,
               setup: {
                 source: ba.setupSource,
                 ...(setupToken ? { token: setupToken } : {}),
@@ -105,6 +112,16 @@ const setup = await ba.setupSource.create(
   new Request(`http://localhost:${port}/admin/setup`),
 );
 if (!setup.ok) throw new Error(`seeding the administrator failed: ${setup.status}`);
+const { user: admin } = (await setup.json()) as { user: { id: string } };
+
+// A machine credential beside the human one: owned by the administrator, but acting in its own
+// name with only `posts` reads and writes — `site:update` is not in its permissions, so a script
+// holding it gets 403 there, however privileged its owner. The plaintext is readable once, here.
+const integration = await ba.apiKeys.create({
+  name: "demo-integration",
+  userId: admin.id,
+  permissions: { posts: ["list", "view", "create", "update"] },
+});
 
 await app.globals.site.update({
   name: "Shuri Demo",
@@ -120,6 +137,9 @@ console.log(`  Admin UI:    http://localhost:${port}/admin`);
 console.log(`               entre com ${ADMIN_EMAIL} / ${ADMIN_PASSWORD}`);
 if (setupToken) console.log(`               token de setup: ${setupToken}`);
 console.log(`  Auth routes: http://localhost:${port}${ba.basePath}/*`);
+console.log(
+  `  API key:     curl -H 'x-api-key: ${integration.key}' http://localhost:${port}/collections/posts`,
+);
 console.log(`  Collections: http://localhost:${port}/collections/posts`);
 console.log(`  Globals:     http://localhost:${port}/globals/site`);
 console.log(`  OpenAPI doc: http://localhost:${port}/openapi.json`);

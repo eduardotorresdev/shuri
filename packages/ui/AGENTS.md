@@ -148,6 +148,12 @@ src/
   - `protect.ts` defaults to **writes only**. Reads are what a headless CMS's API is for — the site
     consuming it holds no session — and closing them would change how an app behaves merely because
     it gained an admin. `everythingUnderApi` closes them, at the cost of a public API.
+  - `exempt` (off by default) names the requests the guard leaves alone whatever `protect` says —
+    those carrying a machine credential, `ba.carriesApiKey` from `@shuri/better-auth`. The guard
+    speaks sessions and a script holding an API key has none, so without it every machine write
+    would be a 401 however scoped its key. Exempting hands the request to `@shuri/api`'s access
+    rules, which is safe exactly when a plugin resolves the principal: an invalid key is anonymous
+    there, and an op with no rule refuses anonymous.
   - `authorize` is the entire authorization story, and it defaults to _any session_. Inventing
     roles here would put a second, weaker permission model beside whatever the host already has.
     **With open signup and the default, anyone who registers can edit everything.** A host stamps
@@ -300,6 +306,7 @@ const app = create({
               auth: ba.sessionSource,
               basePath: ba.basePath,
               authorize: (session) => session.user["role"] === "admin",
+              exempt: ba.carriesApiKey,
               setup: { source: ba.setupSource, token: process.env.SHURI_SETUP_TOKEN },
             },
           },

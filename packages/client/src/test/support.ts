@@ -1,3 +1,4 @@
+import { apiKey } from "@better-auth/api-key";
 import { betterAuthPlugin } from "@shuri/better-auth";
 import { create } from "@shuri/sdk";
 import { createMemoryAdapter } from "@shuri/store-memory";
@@ -43,34 +44,32 @@ export const credentials = {
 export function createTestApp(
   options: { auth?: boolean; client?: Partial<ClientConfig> } = {},
 ) {
+  const auth = options.auth
+    ? betterAuthPlugin({
+        options: {
+          baseURL: "http://localhost",
+          secret: "test-secret-at-least-32-characters-long",
+          emailAndPassword: { enabled: true },
+          // Off under NODE_ENV=test by default, which would hide a client that sends no
+          // Origin: the demo boot is where that surfaced.
+          advanced: { disableOriginCheck: false },
+          plugins: [apiKey()],
+        },
+      })
+    : undefined;
   const app = create({
     collections,
     globals,
     adapter: createMemoryAdapter(),
     realtime: { heartbeatMs: 0 },
-    ...(options.auth
-      ? {
-          plugins: [
-            betterAuthPlugin({
-              options: {
-                baseURL: "http://localhost",
-                secret: "test-secret-at-least-32-characters-long",
-                emailAndPassword: { enabled: true },
-                // Off under NODE_ENV=test by default, which would hide a client that sends no
-                // Origin: the demo boot is where that surfaced.
-                advanced: { disableOriginCheck: false },
-              },
-            }),
-          ],
-        }
-      : {}),
+    ...(auth ? { plugins: [auth] } : {}),
   });
   const client = createClient<typeof app.schema>({
     baseUrl: "http://localhost",
     fetch: (input, init) => app.handler(new Request(input, init)),
     ...options.client,
   });
-  return { app, client };
+  return { app, client, auth };
 }
 
 /**

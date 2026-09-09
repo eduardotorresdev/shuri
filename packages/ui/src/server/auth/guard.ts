@@ -29,12 +29,15 @@ export class AdminForbiddenError extends ApiError {
  *
  * Mounted first — `create()`'s `handlers` run ahead of every built-in route, and ahead of the auth
  * plugin's own, so a login request still reaches the routes that issue a session.
+ *
+ * A request `auth.exempt` matches is declined too, protected or not: it carries a credential this
+ * guard does not speak (an API key), and the API's own access rules are the ones to judge it.
  * @param auth - The resolved auth: what to protect, and how to resolve a session.
  * @returns A handler answering 401/403 for a protected request without one, `undefined` otherwise.
  */
 export function createAdminGuard(auth: ResolvedAdminAuth): FallingHandler {
   return async function handleRequest(request) {
-    if (!auth.protect(request)) return undefined;
+    if (!auth.protect(request) || auth.exempt(request)) return undefined;
 
     try {
       const access = await auth.resolve(request);

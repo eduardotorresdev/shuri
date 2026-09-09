@@ -3,8 +3,8 @@
 Runs [better-auth](https://better-auth.com) on the app's **own** `@shuri/store` — one persistence
 adapter, one set of migrations, one event bus — instead of the second database better-auth normally
 brings. The toolkit's authentication: it mounts better-auth's routes, resolves the principal
-`@shuri/api`'s access control decides on, and backs `@shuri/ui`'s login, first-run and Users
-screens.
+`@shuri/api`'s access control decides on — a `user` behind a session, a `client` behind an API key
+— and backs `@shuri/ui`'s login, first-run and Users screens.
 
 What better-auth brings: email verification, password reset, 2FA, passkeys, magic links, rate
 limiting, a large set of social providers, and roles through its own `admin`/`organization` plugins.
@@ -19,7 +19,8 @@ src/
   collections.ts              betterAuthCollections: better-auth's schema -> Shuri collections
   handler.ts                   toFallingHandler: better-auth's handler -> a Shuri falling one
   session.ts                    toAdminSession/toSessionResolver: its session -> @shuri/ui's AdminSession
-  principal.ts                   toPrincipalResolver: its session -> @shuri/api's Principal
+  principal.ts                   toPrincipalResolver: an API key -> a `client`, else its session -> a `user`
+  api-key.ts                      permissionsToScopes/createApiKeyResolver/createApiKeyIssuer: M2M over @better-auth/api-key
   openapi.ts                      sessionCookieName/betterAuthOpenApiSecurity: the cookie scheme /openapi.json describes
   users.ts                         createBetterAuthUsers: @shuri/ui's UserAdminApi over the store + better-auth's internal adapter
   errors.ts                         UserNotFoundError (404), EmailAlreadyRegisteredError (409)
@@ -36,6 +37,8 @@ src/
     access.test.ts              @shuri/api's access rules over real sessions; the OpenAPI security block
     admin.test.ts               @shuri/ui's admin, guarded by better-auth
     users.test.ts               user administration: create/list/rename/password/remove, verified through sign-in
+    api-key.test.ts             a key as a client principal: scopes, wildcards, usage, bearer, precedence over a cookie
+    api-key-admin.test.ts       a key beside the admin's guard; the plugin with no api-key plugin at all
     setup.test.ts               the first-run flow, including two attempts racing
 ```
 
@@ -116,11 +119,28 @@ signed-in user, exactly as `@shuri/api`'s policy says — and the **openapi** se
   admin's guard speaks (`AdminSessionSource`). `name` is pulled out of the user spread rather than
   written over it — better-auth stores an absent name as `null`, and every `user.name ?? user.email`
   fallback downstream would render that null.
-- **principal.ts** — the same session as `@shuri/api`'s `Principal`: `{ kind: "user", user }` or
-  `ANONYMOUS`. Never throws — an expired or forged cookie is anonymous, exactly like no cookie;
-  whether anonymous is enough is the policy's call. A user carries no scopes: like Payload CMS, any
+- **principal.ts** — the request as `@shuri/api`'s `Principal`: the `client` behind a valid API
+  key first, else `{ kind: "user", user }` for a session, else `ANONYMOUS`. Never throws — an
+  expired or forged cookie, like a revoked key, is anonymous, exactly like no credential; whether
+  anonymous is enough is the policy's call. A user carries no scopes: like Payload CMS, any
   signed-in user may do anything a rule doesn't forbid, and the rule sees `ctx.user` (`role`
-  included, when better-auth's `admin` plugin or `additionalFields` declares one).
+  included, when better-auth's `admin` plugin or `additionalFields` declares one). A client carries
+  exactly its key's scopes, and the policy checks them before any rule runs.
+- **api-key.ts** — machine-to-machine access over
+  [`@better-auth/api-key`](https://www.better-auth.com/docs/plugins/api-key), which the host adds
+  to better-auth's `plugins`; nothing here turns keys on. A key arrives in `x-api-key` (or the
+  `apiKeyHeaders` the host names) or as `Authorization: Bearer` — what `@shuri/client`'s `setToken`
+  sends — and is verified by the plugin's own `verifyApiKey`, so expiry, `enabled`, `remaining`,
+  refills and per-key rate limits are its call, and every request counts. The key's permissions
+  (`{ posts: ["list", "view"] }`) are the scopes `@shuri/core`'s policy checks (`posts:list`), one to
+  one; a `*` on either side is a pattern `expandScopes` resolves against the schema the plugin was
+  handed (`PluginContext.collections`/`globals`), so `{ "*": ["*"] }` is everything served and a
+  resource the schema lacks grants nothing. The principal is a `client` — `{ id, name,
+referenceId, metadata }` — never the owner signed in: a script holding a key acts in its own name,
+  with the key's scopes and none of the owner's standing. `ba.apiKeys.create({ userId,
+permissions, … })` mints one in code (the plaintext is readable exactly once); the plugin's own
+  `/api-key/*` routes let a signed-in user mint their own. `ba.carriesApiKey(request)` is for the
+  admin's `auth.exempt` (below).
 - **openapi.ts** — the `cookieAuth` scheme `/openapi.json` stamps on every guarded operation. The
   cookie name is computed from the options (`advanced.cookiePrefix`, `advanced.cookies`, and
   better-auth's own `__Secure-` rule) rather than read off the built instance, because the document
@@ -142,8 +162,8 @@ signed-in user, exactly as `@shuri/api`'s policy says — and the **openapi** se
   signed in. `fields` stamps whatever `authorize` will read (`{ role: "admin" }`), and **the column
   must be one better-auth knows about**: it parses a user against its own schema on the way out, so
   an undeclared column is stored and then silently dropped before any session sees it.
-- **plugin.ts** — `sessionSource`, `setupSource`, `principal` and `instance()` are handed out
-  **before** `create()` runs and bound afterwards. Without that indirection the composition
+- **plugin.ts** — `sessionSource`, `setupSource`, `principal`, `apiKeys` and `instance()` are
+  handed out **before** `create()` runs and bound afterwards. Without that indirection the composition
   deadlocks: the admin's guard needs a session source, the session source needs the store, and the
   store is what `create()` is in the middle of building.
 
@@ -166,6 +186,14 @@ signed-in user, exactly as `@shuri/api`'s policy says — and the **openapi** se
   which is trusted by construction. **Under `NODE_ENV=test` better-auth skips this check** unless
   `advanced.disableOriginCheck: false` says otherwise — a test that passes without an `Origin` proves
   nothing about a real boot.
+- **The admin's guard speaks sessions, not keys.** `@shuri/ui`'s guard refuses every protected
+  write without an authorized session — a script holding a key has none, so mount the admin with
+  `auth: { …, exempt: ba.carriesApiKey }` and the guard leaves keyed requests to `@shuri/api`'s
+  policy, where an invalid key is anonymous and a valid one has exactly its scopes. Without
+  `@better-auth/api-key` in the plugins `carriesApiKey` is always `false`, so a stray header
+  exempts nothing.
+- **A bad key is logged at ERROR by better-auth** (`Failed to validate API key`) on every request
+  that presents one; a host that expects probing configures better-auth's `logger`.
 - **Undeclared fields are stored but never validated.** `@shuri/core` validates the fields a schema
   declares and ignores the rest, so a better-auth plugin whose columns are missing from
   `betterAuthCollections` still works — it just gets no validation. Passing the same options to both
@@ -176,16 +204,19 @@ signed-in user, exactly as `@shuri/api`'s policy says — and the **openapi** se
 - **Advertised social providers.** The admin's login screen posts to `/sign-in/social` for every
   id in `AdminAuthOptions.providers`, but this plugin does not derive that list from better-auth's
   `socialProviders`; a host lists the ones it wants on the login screen.
-- **Machine-to-machine tokens.** A client-credentials grant with schema-derived scopes is not
-  something better-auth ships; its `apiKey`/`bearer` plugins are the nearest things, and
-  `@shuri/core`'s `Principal` keeps its `client` kind for a plugin that provides one.
+- **A client-credentials grant.** Machine access is an API key, not an OAuth2 token exchange:
+  there is no `/token` route, no `client_id`/`client_secret`, no expiring bearer to refresh. A key
+  is a long-lived secret with its own expiry, usage count and rate limit, which is what
+  `@better-auth/api-key` provides and what most integrations want; an OAuth2 client would be a
+  plugin of its own resolving the same `client` principal.
 - **A migration story.** `@shuri/store` has no migrations, so neither does this. Whatever the app's
   own `StoreAdapter` does about schema changes is what these four tables get.
 
 ## Role in the monorepo
 
-Depends on `better-auth`, `@shuri/store` (the adapter's target), `@shuri/api` (`FallingHandler`,
-`PrincipalResolver`, `ANONYMOUS`), `@shuri/core` (the field types), `@shuri/sdk` (`ShuriPlugin`) and
+Depends on `better-auth` and `@better-auth/api-key`, `@shuri/store` (the adapter's target),
+`@shuri/api` (`FallingHandler`, `PrincipalResolver`, `ANONYMOUS`), `@shuri/core` (the field types,
+`derivedScopes`/`expandScopes`), `@shuri/sdk` (`ShuriPlugin`) and
 `@shuri/ui` (the `AdminSession`/`AdminSetupSource`/`UserAdminApi` ports it implements — types only,
 never the handler). `@shuri/demo` and `@shuri/benchmarking` mount it; `@shuri/client` uses it as a
 devDependency to test its auth routes against the real thing.

@@ -10,6 +10,8 @@ const SECRET_FIELDS: ReadonlySet<string> = new Set([
   "refreshToken",
   "idToken",
   "value",
+  // `@better-auth/api-key`: the key's hash.
+  "key",
 ]);
 
 /**
@@ -22,6 +24,9 @@ const INDEXED_FIELDS: ReadonlySet<string> = new Set([
   "email",
   "userId",
   "identifier",
+  // `@better-auth/api-key`: a key by its hash on every request, a user's keys by owner.
+  "key",
+  "referenceId",
 ]);
 
 /** One entry of better-auth's own schema description, narrowed to what this file reads. */

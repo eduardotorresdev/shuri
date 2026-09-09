@@ -55,6 +55,23 @@ describe("createAdminGuard", () => {
     expect(await response?.json()).toEqual({ error: "Not authenticated" });
   });
 
+  it("leaves an exempt request to the API's own rules, session or not", async () => {
+    const machine = createAdminGuard(
+      resolveAdminAuth(
+        { auth: sessions, exempt: (request) => request.headers.has("x-api-key") },
+        api,
+      ),
+    );
+    const keyed = new Request("http://x/collections/posts", {
+      method: "POST",
+      headers: { "x-api-key": "whatever" },
+    });
+
+    expect(await machine(keyed)).toBeUndefined();
+    // The exemption is the header's, not the path's: the same write without it is still refused.
+    expect((await machine(write()))?.status).toBe(401);
+  });
+
   it("closes reads too when the host asks for it", async () => {
     const closed = createAdminGuard(
       resolveAdminAuth({ auth: sessions, protect: () => true }, api),

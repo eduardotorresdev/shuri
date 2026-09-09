@@ -1,11 +1,24 @@
 import type { OpenApiSecurity } from "@shuri/api";
 import type { BetterAuthOptions } from "better-auth";
+import { DEFAULT_API_KEY_HEADERS } from "./api-key.js";
 
 /** better-auth's default cookie prefix, and what `advanced.cookiePrefix` falls back to. */
 const DEFAULT_COOKIE_PREFIX = "better-auth";
 
 /** The options this file reads, narrowed so a test can pass a literal. */
 export type CookieNameOptions = Pick<BetterAuthOptions, "advanced" | "baseURL">;
+
+/** The options the security block reads: the cookie's, plus `plugins` to see whether API keys are on. */
+export type SecurityOptions = CookieNameOptions & Pick<BetterAuthOptions, "plugins">;
+
+/**
+ * Whether `@better-auth/api-key` is among better-auth's plugins.
+ * @param options - better-auth's own options.
+ * @returns `true` when keys are on.
+ */
+export function hasApiKeys(options: Pick<BetterAuthOptions, "plugins">): boolean {
+  return options.plugins?.some((plugin) => plugin.id === "api-key") ?? false;
+}
 
 /**
  * Whether better-auth will mark its cookies `Secure`, following its own rule: `advanced
@@ -39,17 +52,33 @@ export function sessionCookieName(options: CookieNameOptions): string {
 }
 
 /**
- * How `/openapi.json` describes authentication once better-auth guards the routes: one `apiKey`
- * scheme in the cookie, and every guarded operation requiring it. A user carries no scopes, so the
- * requirement lists none.
- * @param options - better-auth's own options, for the cookie name.
+ * How `/openapi.json` describes authentication once better-auth guards the routes: the session
+ * cookie and — with `@better-auth/api-key` on — the key header, either one satisfying every
+ * guarded operation. Neither scheme lists scopes: OpenAPI reserves those for OAuth2, and a key's
+ * scopes are its own permissions, not something a caller negotiates per request.
+ * @param options - better-auth's own options, for the cookie name and the plugin list.
+ * @param [apiKeyHeaders] - The headers a key may arrive in; the first is the one documented.
  * @returns The security block for `createOpenApiHandler`.
  */
-export function betterAuthOpenApiSecurity(options: CookieNameOptions): OpenApiSecurity {
+export function betterAuthOpenApiSecurity(
+  options: SecurityOptions,
+  apiKeyHeaders: readonly string[] = DEFAULT_API_KEY_HEADERS,
+): OpenApiSecurity {
+  const keys = hasApiKeys(options);
+  const requirements: OpenApiSecurity["requirements"] = () => {
+    const alternatives: ReturnType<OpenApiSecurity["requirements"]> = [
+      { cookieAuth: [] },
+    ];
+    if (keys) alternatives.push({ apiKeyAuth: [] });
+    return alternatives;
+  };
   return {
     schemes: {
       cookieAuth: { type: "apiKey", in: "cookie", name: sessionCookieName(options) },
+      ...(keys
+        ? { apiKeyAuth: { type: "apiKey", in: "header", name: apiKeyHeaders[0] } }
+        : {}),
     },
-    requirements: () => [{ cookieAuth: [] }],
+    requirements,
   };
 }

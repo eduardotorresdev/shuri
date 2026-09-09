@@ -63,6 +63,31 @@ describe("create({ plugins })", () => {
     expect(await response.json()).toEqual([]);
   });
 
+  it("hands a plugin's handlers the app's own schema, its own tables excluded", () => {
+    let seen:
+      | { collections: readonly { slug: string }[]; globals: readonly unknown[] }
+      | undefined;
+    create({
+      collections,
+      adapter: createMemoryAdapter(),
+      plugins: [
+        {
+          name: "widgets",
+          collections: [extra],
+          handlers: (context) => {
+            seen = context;
+            return [];
+          },
+        },
+      ],
+    });
+
+    expect(seen?.collections.map((entry) => entry.slug)).toEqual(
+      collections.map((entry) => entry.slug),
+    );
+    expect(seen?.globals).toEqual([]);
+  });
+
   it("keeps them off app.collections, as auth's are kept off", () => {
     const app = create({
       collections,

@@ -230,7 +230,11 @@ export function create<
 
   const core = createCore({ collections, globals });
   const store = createStore(core, config.adapter);
-  const context = { store } as unknown as PluginContext;
+  const context = {
+    store,
+    collections: config.collections,
+    globals,
+  } as unknown as PluginContext;
 
   return {
     collections: buildCollections(config.collections, store),

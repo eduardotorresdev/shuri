@@ -18,6 +18,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@better-auth/api-key": "1.7.3",
     "@shuri/api": "workspace:*",
     "@shuri/core": "workspace:*",
     "@shuri/sdk": "workspace:*",

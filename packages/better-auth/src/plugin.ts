@@ -1,11 +1,20 @@
 import { betterAuth, type BetterAuthOptions } from "better-auth";
+import { derivedScopes } from "@shuri/core";
 import type { FallingHandler, PrincipalResolver } from "@shuri/api";
 import type { ShuriPlugin } from "@shuri/sdk";
 import type { AdminSessionSource, AdminSetupSource, UserAdminApi } from "@shuri/ui";
 import { createShuriAdapter, type CreateShuriAdapterOptions } from "./adapter/factory.js";
+import {
+  apiKeyFrom,
+  createApiKeyIssuer,
+  createApiKeyResolver,
+  type ApiKeyIssuer,
+  type ApiKeyResolver,
+  type BetterAuthApiKeyApi,
+} from "./api-key.js";
 import { betterAuthCollections } from "./collections.js";
 import { toFallingHandler } from "./handler.js";
-import { betterAuthOpenApiSecurity } from "./openapi.js";
+import { betterAuthOpenApiSecurity, hasApiKeys } from "./openapi.js";
 import { toPrincipalResolver } from "./principal.js";
 import { toSessionResolver } from "./session.js";
 import { createBetterAuthSetup, type BetterAuthSetupOptions } from "./setup.js";
@@ -27,6 +36,12 @@ export interface BetterAuthPluginConfig {
    * creates, most of all. Setup itself is turned on by handing `setupSource` to the admin.
    */
   setup?: BetterAuthSetupOptions;
+  /**
+   * The headers a machine credential arrives in, once `@better-auth/api-key` is in
+   * `options.plugins` (default `x-api-key`, the plugin's own; `Authorization: Bearer` is always
+   * accepted after them). Nothing here turns keys on — the plugin does.
+   */
+  apiKeyHeaders?: readonly string[];
 }
 
 /**
@@ -72,6 +87,19 @@ export interface BetterAuthPlugin extends ShuriPlugin {
    * `auth.setup.source` and the admin shows a first-account form while the user table is empty.
    */
   setupSource: AdminSetupSource;
+  /**
+   * Mints API keys in code, once `@better-auth/api-key` is on. A request carrying one resolves
+   * to a `client` principal with the scopes its permissions name. Throws before `create()` has run.
+   */
+  apiKeys: ApiKeyIssuer;
+  /**
+   * Whether a request carries an API key (in a configured header, or as a bearer) — for the
+   * admin's `auth.exempt`, so its guard leaves machine requests to the API's access rules.
+   * Always `false` without `@better-auth/api-key`, so nothing is exempted by a stray header.
+   * @param request - The incoming request.
+   * @returns `true` when the request presents a key.
+   */
+  carriesApiKey(request: Request): boolean;
   /** The built better-auth instance, for `auth.api.*` calls. Throws before `create()` has run. */
   instance(): BetterAuthInstance;
 }
@@ -125,15 +153,18 @@ export function betterAuthPlugin(config: BetterAuthPluginConfig = {}): BetterAut
     instance();
     return users as UserAdminApi;
   };
+  let apiKeys: ApiKeyResolver | undefined;
   const principal: PrincipalResolver = (request) =>
-    toPrincipalResolver(instance())(request);
+    toPrincipalResolver(instance(), { apiKeys })(request);
+  const issuer = (): ApiKeyIssuer =>
+    createApiKeyIssuer(instance() as unknown as BetterAuthApiKeyApi);
 
   return {
     name: "@shuri/better-auth",
     basePath,
     collections: betterAuthCollections(options),
     principal,
-    openapi: { security: betterAuthOpenApiSecurity(options) },
+    openapi: { security: betterAuthOpenApiSecurity(options, config.apiKeyHeaders) },
     // Delegates through `instance()` rather than capturing anything, so this object is usable as an
     // argument to a handler composed in the same `create()` call that builds better-auth.
     sessionSource: {
@@ -150,11 +181,18 @@ export function betterAuthPlugin(config: BetterAuthPluginConfig = {}): BetterAut
       required: () => resolvedSetup().required(),
       create: (credentials, request) => resolvedSetup().create(credentials, request),
     },
+    apiKeys: { create: (input) => issuer().create(input) },
+    carriesApiKey: (request) =>
+      hasApiKeys(options) && apiKeyFrom(request, config.apiKeyHeaders) !== undefined,
     instance,
 
-    handlers({ store }): readonly FallingHandler[] {
+    handlers({ store, collections, globals }): readonly FallingHandler[] {
       const auth = buildBetterAuth(options, createShuriAdapter(store, config.adapter));
       built = auth;
+      apiKeys = createApiKeyResolver(auth as unknown as BetterAuthApiKeyApi, {
+        headers: config.apiKeyHeaders,
+        universe: derivedScopes(collections, globals),
+      });
       setup = createBetterAuthSetup(auth, store, basePath, config.setup);
       users = createBetterAuthUsers(auth, store, userModel);
       return [toFallingHandler(auth, basePath)];

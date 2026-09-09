@@ -21,6 +21,7 @@
     "@shuri/core": "workspace:*"
   },
   "devDependencies": {
+    "@better-auth/api-key": "1.7.3",
     "@shuri/better-auth": "workspace:*",
     "@shuri/config": "workspace:*",
     "@shuri/sdk": "workspace:*",

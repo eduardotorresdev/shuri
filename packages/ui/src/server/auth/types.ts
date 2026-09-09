@@ -75,6 +75,17 @@ export interface AdminAuthOptions {
    */
   protect?: (request: Request) => boolean;
   /**
+   * Requests the guard leaves alone whatever `protect` says, handing them to the API's own access
+   * rules instead: those carrying a machine credential, typically — `ba.carriesApiKey` from
+   * `@shuri/better-auth`. Off by default.
+   *
+   * The guard speaks sessions, and a script holding an API key has none; refusing it here would
+   * make every machine write a 401 however scoped its key. Exempting it is safe exactly when a
+   * plugin resolves the principal, because then `@shuri/api` judges the request on its own
+   * (an invalid key is anonymous there, and an op with no rule refuses anonymous).
+   */
+  exempt?: (request: Request) => boolean;
+  /**
    * The Users screens: listing, creating, editing and deleting accounts. Defaults to `auth.users`,
    * so an app on `@shuri/better-auth` gets them by passing its session source.
    *
