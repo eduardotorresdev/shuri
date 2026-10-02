@@ -48,7 +48,7 @@ src/
 
 None, on purpose. The adapter exposes no `migrations` driver and does not depend on `@shuri/migrate`: MongoDB is
 schemaless, so adding or dropping fields needs no migration, and renames and type changes are handled manually
-for now (a driver was built and then removed; see `docs/plans/migrate.md`, sections 11.2 and 18). Migrations
+for now (a driver was built and then removed). Migrations
 are optional per adapter, so this is a valid adapter.
 
 ## Testing

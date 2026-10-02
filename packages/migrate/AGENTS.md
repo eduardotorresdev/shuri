@@ -2,7 +2,7 @@
 
 Schema migrations for Shuri: snapshot of the persisted schema, diff to ops, JSON migration files
 organised as a `parent` DAG with automatic reconciliation, a runner with journal/lock/checksum, and a
-CLI. The design lives in `docs/plans/migrate.md`. The package, its one driver (`@shuri/store-memory`, a
+CLI. The package, its one driver (`@shuri/store-memory`, a
 reference/debug driver), the `@shuri/sdk` `resolveSchema` entry and the demo wiring are all in place; the
 relational `@shuri/store-d1` driver is the next plan (F10) and starts from the SQLite spike under `src/test/`.
 
@@ -202,7 +202,7 @@ adapter.
 
 ## Deviations from the plan
 
-Recorded in `docs/plans/migrate.md` section 18:
+Deviations from the original design:
 
 - `SLUG_PATTERN` is `/^[a-z][A-Za-z0-9_-]{0,62}$/` (uppercase after the first character) because the demo
   already ships the global `seoDefaults`; the plan says to relax the pattern rather than rename.
