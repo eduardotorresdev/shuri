@@ -1,0 +1,358 @@
+{
+  "format": 1,
+  "id": "20261002T165130279Z_ecaf_init",
+  "parent": null,
+  "ops": [
+    {
+      "op": "createEntity",
+      "target": {
+        "kind": "collection",
+        "slug": "account"
+      },
+      "fields": {
+        "accountId": {
+          "type": "text",
+          "index": false
+        },
+        "providerId": {
+          "type": "text",
+          "index": false
+        },
+        "userId": {
+          "type": "relation",
+          "collection": "user",
+          "multiple": false,
+          "index": true
+        },
+        "accessToken": {
+          "type": "text",
+          "index": false
+        },
+        "refreshToken": {
+          "type": "text",
+          "index": false
+        },
+        "idToken": {
+          "type": "text",
+          "index": false
+        },
+        "accessTokenExpiresAt": {
+          "type": "text",
+          "index": false
+        },
+        "refreshTokenExpiresAt": {
+          "type": "text",
+          "index": false
+        },
+        "scope": {
+          "type": "text",
+          "index": false
+        },
+        "password": {
+          "type": "text",
+          "index": false
+        },
+        "createdAt": {
+          "type": "text",
+          "index": false
+        },
+        "updatedAt": {
+          "type": "text",
+          "index": false
+        }
+      }
+    },
+    {
+      "op": "createEntity",
+      "target": {
+        "kind": "collection",
+        "slug": "apikey"
+      },
+      "fields": {
+        "configId": {
+          "type": "text",
+          "index": false
+        },
+        "name": {
+          "type": "text",
+          "index": false
+        },
+        "start": {
+          "type": "text",
+          "index": false
+        },
+        "referenceId": {
+          "type": "text",
+          "index": true
+        },
+        "prefix": {
+          "type": "text",
+          "index": false
+        },
+        "key": {
+          "type": "text",
+          "index": true
+        },
+        "refillInterval": {
+          "type": "number",
+          "kind": "float",
+          "index": false
+        },
+        "refillAmount": {
+          "type": "number",
+          "kind": "float",
+          "index": false
+        },
+        "lastRefillAt": {
+          "type": "text",
+          "index": false
+        },
+        "enabled": {
+          "type": "boolean",
+          "index": false
+        },
+        "rateLimitEnabled": {
+          "type": "boolean",
+          "index": false
+        },
+        "rateLimitTimeWindow": {
+          "type": "number",
+          "kind": "float",
+          "index": false
+        },
+        "rateLimitMax": {
+          "type": "number",
+          "kind": "float",
+          "index": false
+        },
+        "requestCount": {
+          "type": "number",
+          "kind": "float",
+          "index": false
+        },
+        "remaining": {
+          "type": "number",
+          "kind": "float",
+          "index": false
+        },
+        "lastRequest": {
+          "type": "text",
+          "index": false
+        },
+        "expiresAt": {
+          "type": "text",
+          "index": false
+        },
+        "createdAt": {
+          "type": "text",
+          "index": false
+        },
+        "updatedAt": {
+          "type": "text",
+          "index": false
+        },
+        "permissions": {
+          "type": "text",
+          "index": false
+        },
+        "metadata": {
+          "type": "text",
+          "index": false
+        }
+      }
+    },
+    {
+      "op": "createEntity",
+      "target": {
+        "kind": "collection",
+        "slug": "authors"
+      },
+      "fields": {
+        "name": {
+          "type": "text",
+          "index": false
+        },
+        "email": {
+          "type": "email",
+          "index": false
+        }
+      }
+    },
+    {
+      "op": "createEntity",
+      "target": {
+        "kind": "collection",
+        "slug": "posts"
+      },
+      "fields": {
+        "title": {
+          "type": "text",
+          "index": false
+        },
+        "body": {
+          "type": "textarea",
+          "index": false
+        },
+        "status": {
+          "type": "select",
+          "multiple": false,
+          "index": false
+        },
+        "author": {
+          "type": "relation",
+          "collection": "authors",
+          "multiple": false,
+          "index": false
+        },
+        "readingMinutes": {
+          "type": "number",
+          "kind": "integer",
+          "index": false
+        },
+        "published": {
+          "type": "boolean",
+          "index": false
+        }
+      }
+    },
+    {
+      "op": "createEntity",
+      "target": {
+        "kind": "collection",
+        "slug": "session"
+      },
+      "fields": {
+        "expiresAt": {
+          "type": "text",
+          "index": false
+        },
+        "token": {
+          "type": "text",
+          "index": true
+        },
+        "createdAt": {
+          "type": "text",
+          "index": false
+        },
+        "updatedAt": {
+          "type": "text",
+          "index": false
+        },
+        "ipAddress": {
+          "type": "text",
+          "index": false
+        },
+        "userAgent": {
+          "type": "text",
+          "index": false
+        },
+        "userId": {
+          "type": "relation",
+          "collection": "user",
+          "multiple": false,
+          "index": true
+        }
+      }
+    },
+    {
+      "op": "createEntity",
+      "target": {
+        "kind": "collection",
+        "slug": "user"
+      },
+      "fields": {
+        "name": {
+          "type": "text",
+          "index": false
+        },
+        "email": {
+          "type": "text",
+          "index": true
+        },
+        "emailVerified": {
+          "type": "boolean",
+          "index": false
+        },
+        "image": {
+          "type": "text",
+          "index": false
+        },
+        "createdAt": {
+          "type": "text",
+          "index": false
+        },
+        "updatedAt": {
+          "type": "text",
+          "index": false
+        },
+        "role": {
+          "type": "text",
+          "index": false
+        }
+      }
+    },
+    {
+      "op": "createEntity",
+      "target": {
+        "kind": "collection",
+        "slug": "verification"
+      },
+      "fields": {
+        "identifier": {
+          "type": "text",
+          "index": true
+        },
+        "value": {
+          "type": "text",
+          "index": false
+        },
+        "expiresAt": {
+          "type": "text",
+          "index": false
+        },
+        "createdAt": {
+          "type": "text",
+          "index": false
+        },
+        "updatedAt": {
+          "type": "text",
+          "index": false
+        }
+      }
+    },
+    {
+      "op": "createEntity",
+      "target": {
+        "kind": "global",
+        "slug": "seoDefaults"
+      },
+      "fields": {
+        "title": {
+          "type": "text",
+          "index": false
+        },
+        "description": {
+          "type": "textarea",
+          "index": false
+        }
+      }
+    },
+    {
+      "op": "createEntity",
+      "target": {
+        "kind": "global",
+        "slug": "site"
+      },
+      "fields": {
+        "name": {
+          "type": "text",
+          "index": false
+        },
+        "tagline": {
+          "type": "text",
+          "index": false
+        }
+      }
+    }
+  ]
+}

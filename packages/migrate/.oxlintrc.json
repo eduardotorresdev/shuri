@@ -1,0 +1,27 @@
+{
+  "extends": ["../config/oxlintrc.base.json"],
+  "overrides": [
+    {
+      "files": ["src/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^node:",
+                "message": "The migrate core runs in Workers: `node:*` is only allowed under src/node/** (and in tests)."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/node/**", "src/**/*.test.ts", "src/**/test/**"],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
+    }
+  ]
+}

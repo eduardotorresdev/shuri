@@ -8,14 +8,27 @@ standalone rather than a dependency of other packages.
 ## Tree
 
 ```
+shuri.migrate.ts               config for `shuri-migrate` (schema from app-config.ts, the memory adapter, frozenRef)
+migrations/                    <id>.json migrations written by `shuri-migrate generate`; index.ts is generated and gitignored
 src/
-  server.ts                   entry point: builds the app (better-auth + admin), registers hooks, seeds data and the administrator, runs the auth walkthrough, serves, subscribes
+  app-config.ts                the app configuration with no side effects (schema, better-auth + admin plugins, memory adapter); shared by server.ts and shuri.migrate.ts
+  server.ts                   entry point: `migrateUp` from the bundled migrations, builds the app from app-config, registers hooks, seeds data and the administrator, runs the auth walkthrough, serves, subscribes
   auth-walkthrough.ts          signup -> me -> logout -> login, through @shuri/client bound to app.handler
   collections.ts               example schema: posts (with a schema-declared hook), authors
   globals.ts                    example schema: site, seoDefaults
 ```
 
 ## What each part does
+
+- **Migrations.** The store schema comes from `migrations/`, not from the collections directly: `server.ts`
+  calls `migrateUp({ files: parseBundle(migrations), driver, schema: resolveSchema(appConfig) })` before
+  seeding (a production app would run `shuri-migrate up` as a deploy step and `assertMigrated` at boot).
+  Change a collection/global (or the better-auth options, which change the schema too) and
+  `pnpm migrate:check` fails with drift until `pnpm migrate generate <name>` records it. `prestart` and
+  `pretypecheck` regenerate the bundle, but `migrate:check` deliberately does not: it must see the bundle as
+  it is, so a stale or missing one fails the check. It is a turbo task (`dependsOn ^build`) run in CI after
+  `typecheck` (which produces the bundle). The adapter is the memory one, a reference/debug driver, which is
+  enough because memory state resets on every boot.
 
 - **Hooks, both ways** — `collections.ts` declares a `beforeChange` hook on `posts` (the Payload
   side: on the schema, run first, here trimming the title and logging who wrote it), and

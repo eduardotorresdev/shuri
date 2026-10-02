@@ -3,15 +3,14 @@ import { ValidationError, formatIssue, formatIssues } from "./errors.js";
 import {
   all,
   array,
-  arrayOf,
   assertValid,
   keyedArray,
   nonEmpty,
+  nullable,
   object,
   objectOf,
   oneOf,
   optional,
-  record,
   refine,
   required,
   unique,
@@ -87,41 +86,6 @@ describe("oneOf", () => {
   it("supports a custom message", () => {
     expect(validate("up", oneOf(["asc", "desc"], "bad direction"), "direction")).toEqual([
       { path: "direction", message: "bad direction" },
-    ]);
-  });
-});
-
-describe("arrayOf", () => {
-  it("validates each item once confirmed to be an array", () => {
-    const items = arrayOf<{ name: string }>(
-      object({ name: required('"name" is required') }),
-    );
-    expect(validate([{ name: "ok" }, { name: "" }], items, "items")).toEqual([
-      { path: "items.1.name", message: '"name" is required' },
-    ]);
-  });
-
-  it("flags a non-array value instead of throwing", () => {
-    expect(validate("not an array", arrayOf(required()), "items")).toEqual([
-      { path: "items", message: "must be an array" },
-    ]);
-  });
-});
-
-describe("record", () => {
-  it("validates every value at its own key", () => {
-    const filters = record<number>(refine((value) => value > 0, "must be positive"));
-    expect(validate({ a: 1, b: -1 }, filters, "where")).toEqual([
-      { path: "where.b", message: "must be positive" },
-    ]);
-  });
-
-  it("flags a non-object value instead of throwing", () => {
-    expect(validate([1, 2], record(required()), "where")).toEqual([
-      { path: "where", message: "must be an object" },
-    ]);
-    expect(validate("nope", record(required()), "where")).toEqual([
-      { path: "where", message: "must be an object" },
     ]);
   });
 });
@@ -269,5 +233,26 @@ describe("objectOf", () => {
 
   it("ignores undeclared keys by default", () => {
     expect(validate({ read: true }, objectOf({}))).toEqual([]);
+  });
+});
+
+describe("nullable", () => {
+  const nonBlank = refine<string>((v) => v !== "", "must not be blank");
+
+  it("accepts null without running the inner validator", () => {
+    expect(validate(null, nullable(nonBlank))).toEqual([]);
+  });
+
+  it("delegates any other value, keeping the path", () => {
+    expect(validate("", nullable(nonBlank), "name")).toEqual([
+      { path: "name", message: "must not be blank" },
+    ]);
+    expect(validate("x", nullable(nonBlank))).toEqual([]);
+  });
+
+  it("does not treat undefined as null", () => {
+    expect(validate(undefined as unknown as string, nullable(required()))).toHaveLength(
+      1,
+    );
   });
 });

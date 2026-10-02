@@ -12,9 +12,11 @@ too, and run by `@shuri/store`.
 ```
 src/
   index.ts                    re-exports collections/ and globals/
+  schema.ts                   ResolvedSchema: the merged, validated {collections, globals} tools like @shuri/migrate receive
   fields/
     validator.ts               fieldValidator/fieldsValidator: shape of a Field (shared)
-    validator.test.ts
+    slug.ts                    slugValidator/fieldNameValidator: reserved `_` slug prefix and reserved `id` field name
+    validator.test.ts, slug.test.ts
   collections/
     types.ts                    CollectionSchema (slug, title, singular, plural, orderable?, internal?, access?, hooks?, fields)
     fields.ts                    Field union (text/textarea/email/select/number/boolean/relation)
@@ -50,6 +52,12 @@ src/
 
 ## What each part does
 
+- **fields/slug.ts** — two reserved names, enforced for collections and globals alike: a slug cannot
+  start with `_` (that prefix belongs to Shuri's own storage, e.g. the `_globals` Mongo collection and
+  the `_migrations` journal) and no field can be called `id` (every record already has one, and the
+  Mongo adapter maps it to `_id`).
+- **schema.ts** — `ResolvedSchema`, the `{collections, globals}` pair once plugins are merged and
+  everything validated; the input of `@shuri/migrate`'s snapshot.
 - **fields/validator.ts** — validates the shape of a single `Field`: `select` requires non-empty,
   non-duplicate options, `number` checks min/max/sign/kind coherence, `relation` must reference an
   existing collection slug. Used by both `collections/schema.ts` and `globals/schema.ts`.

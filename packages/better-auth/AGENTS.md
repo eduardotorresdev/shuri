@@ -209,8 +209,12 @@ permissions, … })` mints one in code (the plaintext is readable exactly once);
   is a long-lived secret with its own expiry, usage count and rate limit, which is what
   `@better-auth/api-key` provides and what most integrations want; an OAuth2 client would be a
   plugin of its own resolving the same `client` principal.
-- **A migration story.** `@shuri/store` has no migrations, so neither does this. Whatever the app's
-  own `StoreAdapter` does about schema changes is what these four tables get.
+- **A migration engine of its own.** The four tables are ordinary collections of the app's schema, so
+  `@shuri/migrate` tracks them like any other: after upgrading better-auth, enabling a plugin or
+  changing `betterAuthCollections` options, the effective schema changes and `shuri-migrate check`
+  reports drift until `shuri-migrate generate <name>` records it (the demo's `pnpm migrate:check`
+  does this in CI). Pass the same options to the plugin and to the migration config's schema, or
+  the migrations will describe tables the running app does not use.
 
 ## Role in the monorepo
 

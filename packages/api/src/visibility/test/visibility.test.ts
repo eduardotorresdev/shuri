@@ -23,7 +23,7 @@ const users: CollectionSchema = {
 };
 
 const sessions: CollectionSchema = {
-  slug: "_sessions",
+  slug: "sessions",
   title: "Sessions",
   singular: "Session",
   plural: "Sessions",
@@ -116,17 +116,17 @@ describe("hidden fields", () => {
 
 describe("internal collections", () => {
   it("answer exactly as a slug that was never declared", async () => {
-    const internal = await handler(new Request("http://localhost/collections/_sessions"));
+    const internal = await handler(new Request("http://localhost/collections/sessions"));
     const unknown = await handler(new Request("http://localhost/collections/nope"));
 
     expect(internal.status).toBe(unknown.status);
-    expect(await internal.json()).toEqual({ error: 'Unknown collection "_sessions"' });
+    expect(await internal.json()).toEqual({ error: 'Unknown collection "sessions"' });
     expect(await unknown.json()).toEqual({ error: 'Unknown collection "nope"' });
   });
 
   it("stay fully usable programmatically", async () => {
-    const session = await store.collection("_sessions").insert({ tokenHash: "abc" });
-    expect(await store.collection("_sessions").get(session.id)).toMatchObject({
+    const session = await store.collection("sessions").insert({ tokenHash: "abc" });
+    expect(await store.collection("sessions").get(session.id)).toMatchObject({
       tokenHash: "abc",
     });
   });
@@ -139,9 +139,9 @@ describe("the event stream", () => {
     );
     const frames = readEvents(response, 1);
 
-    // Written first: if the first frame that arrives is the `users` one, the `_sessions` write
+    // Written first: if the first frame that arrives is the `users` one, the `sessions` write
     // produced none. Asserting absence in a stream any other way is a race.
-    await store.collection("_sessions").insert({ tokenHash: "abc" });
+    await store.collection("sessions").insert({ tokenHash: "abc" });
     const user = await insertUser();
 
     expect(await frames).toEqual([
@@ -158,7 +158,7 @@ describe("the event stream", () => {
 
   it("404s a selection naming an internal collection", async () => {
     const response = await handler(
-      new Request("http://localhost/events?collection=_sessions", {
+      new Request("http://localhost/events?collection=sessions", {
         signal: controller.signal,
       }),
     );
@@ -172,8 +172,8 @@ describe("the OpenAPI document", () => {
     const document = (await response.json()) as OpenApiDocument;
 
     expect(Object.keys(document.paths)).toContain("/collections/users");
-    expect(Object.keys(document.paths)).not.toContain("/collections/_sessions");
-    expect(document.components.schemas["_sessions"]).toBeUndefined();
+    expect(Object.keys(document.paths)).not.toContain("/collections/sessions");
+    expect(document.components.schemas["sessions"]).toBeUndefined();
     expect(document.components.schemas["users"].properties).toEqual({
       id: { type: "string", readOnly: true },
       email: { type: "string", format: "email" },

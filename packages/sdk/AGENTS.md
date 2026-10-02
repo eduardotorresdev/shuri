@@ -12,6 +12,8 @@ src/
   index.ts                    re-exports create.js, plugin.js and sveltekit.js, plus the api/core types
   create.ts                    create(), ShuriApp, CreateConfig, AppCollections/AppGlobals
   create.test.ts               unit tests for create()
+  schema.ts                    resolveCore(config) (plugins merged + validated) and resolveSchema(config)
+  schema.test.ts
   plugin.ts                    ShuriPlugin/PluginContext, collectPluginCollections/Access/OpenApi
   plugin.test.ts
   create.hooks.test.ts         unit tests for app.hooks
@@ -27,6 +29,7 @@ src/
 
 ## What each part does
 
+- **schema.ts** — `resolveCore(config)` merges every plugin's collections in ahead of the declared ones and validates with `createCore`; `create()` builds its `Core` from it (so the schema is validated once). `resolveSchema(config)` returns `{ collections, globals }` of that core: the schema the store really runs on, which `@shuri/migrate` diffs. It takes the app config as is (`SchemaConfig`).
 - **create.ts** — `create({ collections, globals, adapter, handlers?, plugins?, api?, globalsApi?, realtime?, openapi? })`: 0. Collects every plugin's collections (`collectPluginCollections`), refusing a slug the app
   already declares, and merges them in ahead of the consumer's own.
   1. Calls `createCore` (`@shuri/core`) to validate the declared schema.

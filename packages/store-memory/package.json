@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@shuri/core": "workspace:*",
+    "@shuri/migrate": "workspace:*",
     "@shuri/store": "workspace:*"
   },
   "devDependencies": {

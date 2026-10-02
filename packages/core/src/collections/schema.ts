@@ -9,13 +9,14 @@ import {
 import { COLLECTION_ACCESS_OPS } from "../access/types.js";
 import { accessValidator } from "../access/validator.js";
 import { fieldsValidator } from "../fields/validator.js";
+import { slugValidator } from "../fields/slug.js";
 import { COLLECTION_HOOK_NAMES } from "../hooks/types.js";
 import { hooksValidator } from "../hooks/validator.js";
 import type { CollectionSchema } from "./types.js";
 
 function collectionValidator(slugs: Set<string>): Validator<CollectionSchema> {
   return object<CollectionSchema>({
-    slug: required('"slug" is required'),
+    slug: slugValidator,
     title: required('"title" is required'),
     singular: required('"singular" is required'),
     plural: required('"plural" is required'),

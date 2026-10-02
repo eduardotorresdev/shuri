@@ -1,5 +1,6 @@
 export * from "./create.js";
 export * from "./plugin.js";
+export { resolveSchema, type SchemaConfig } from "./schema.js";
 export * from "./sveltekit.js";
 export {
   ForbiddenError,

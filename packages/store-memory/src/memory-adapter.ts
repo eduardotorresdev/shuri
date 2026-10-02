@@ -1,25 +1,23 @@
 import { randomUUID } from "node:crypto";
-import type { CollectionSchema, GlobalSchema, Where } from "@shuri/core";
+import type { GlobalSchema, Where } from "@shuri/core";
+import type { Migratable } from "@shuri/migrate";
 import {
   compareValues,
   matchesWhere,
   RecordNotFoundError,
   type OrderBy,
   type Query,
-  type RecordId,
-  type RecordInput,
   type StoreAdapter,
   type StoreRecord,
 } from "@shuri/store";
-
-/** A secondary index: field value -> the ids of the records holding it. */
-type FieldIndex = Map<unknown, Set<RecordId>>;
-
-interface Table {
-  rows: Map<RecordId, StoreRecord>;
-  /** One index per field declared `index: true`, keyed by field name. */
-  indexes: Map<string, FieldIndex>;
-}
+import { createMemoryMigrations, type MemoryMigrationsOptions } from "./migrations.js";
+import {
+  createMemoryState,
+  indexRecord,
+  tableFor,
+  unindexRecord,
+  type Table,
+} from "./tables.js";
 
 function sortRecords(records: StoreRecord[], orderBy: OrderBy[]): StoreRecord[] {
   return records.toSorted((a, b) => {
@@ -84,26 +82,8 @@ function candidates(table: Table, where: Where | undefined): StoreRecord[] {
   return [...table.rows.values()];
 }
 
-function indexRecord(table: Table, record: StoreRecord): void {
-  for (const [field, index] of table.indexes) {
-    const value = record[field];
-    let ids = index.get(value);
-    if (!ids) {
-      ids = new Set();
-      index.set(value, ids);
-    }
-    ids.add(record.id);
-  }
-}
-
-function unindexRecord(table: Table, record: StoreRecord): void {
-  for (const [field, index] of table.indexes) {
-    const ids = index.get(record[field]);
-    if (!ids) continue;
-    ids.delete(record.id);
-    if (ids.size === 0) index.delete(record[field]);
-  }
-}
+/** A `StoreAdapter` that is also `Migratable`: `adapter.migrations` is its `MigrationDriver`. */
+export type MemoryAdapter = StoreAdapter & Migratable;
 
 /** In-memory `StoreAdapter`, useful for tests and for development before a real database is wired up.
  *
@@ -111,37 +91,30 @@ function unindexRecord(table: Table, record: StoreRecord): void {
  * reads that value's records instead of copying and filtering the table — the difference between
  * an authenticated request costing O(1) and O(sessions). An unfiltered, unsorted `findMany` pages
  * straight off the table iterator for the same reason.
- * @returns A `StoreAdapter` backed by in-memory tables keyed by collection slug.
+ * Migrations: `adapter.migrations` is the `MigrationDriver` of `@shuri/migrate` over the same
+ * state, applying each migration copy-on-write.
+ * @param options - Test seams for the migration driver.
+ * @returns A `StoreAdapter` backed by in-memory tables keyed by collection slug, and migratable.
  */
-export function createMemoryAdapter(): StoreAdapter {
-  const tables = new Map<string, Table>();
-  const globalTable = new Map<string, RecordInput>();
-
-  function tableFor(collection: CollectionSchema): Table {
-    let table = tables.get(collection.slug);
-    if (!table) {
-      table = { rows: new Map(), indexes: new Map() };
-      for (const field of collection.fields) {
-        if (field.index) table.indexes.set(field.name, new Map());
-      }
-      tables.set(collection.slug, table);
-    }
-    return table;
-  }
+export function createMemoryAdapter(
+  options: MemoryMigrationsOptions = {},
+): MemoryAdapter {
+  const state = createMemoryState();
 
   return {
+    migrations: createMemoryMigrations(state, options),
     async findMany(collection, query) {
-      const table = tableFor(collection);
+      const table = tableFor(state, collection);
       if (!query?.where && !query?.orderBy) {
         return page(table.rows.values(), query?.offset, query?.limit);
       }
       return applyQuery(candidates(table, query.where), query);
     },
     async findOne(collection, id) {
-      return tableFor(collection).rows.get(id);
+      return tableFor(state, collection).rows.get(id);
     },
     async count(collection, query) {
-      const table = tableFor(collection);
+      const table = tableFor(state, collection);
       if (!query?.where) {
         const available = Math.max(0, table.rows.size - (query?.offset ?? 0));
         return query?.limit === undefined ? available : Math.min(available, query.limit);
@@ -149,14 +122,14 @@ export function createMemoryAdapter(): StoreAdapter {
       return applyQuery(candidates(table, query.where), query).length;
     },
     async insert(collection, data) {
-      const table = tableFor(collection);
+      const table = tableFor(state, collection);
       const record: StoreRecord = { ...data, id: randomUUID() };
       table.rows.set(record.id, record);
       indexRecord(table, record);
       return record;
     },
     async update(collection, id, data) {
-      const table = tableFor(collection);
+      const table = tableFor(state, collection);
       const previous = table.rows.get(id);
       if (!previous) throw new RecordNotFoundError(collection.slug, id);
 
@@ -167,18 +140,18 @@ export function createMemoryAdapter(): StoreAdapter {
       return updated;
     },
     async delete(collection, id) {
-      const table = tableFor(collection);
+      const table = tableFor(state, collection);
       const record = table.rows.get(id);
       if (!record) return;
       unindexRecord(table, record);
       table.rows.delete(id);
     },
     async findGlobal(global: GlobalSchema) {
-      return globalTable.get(global.slug);
+      return state.globals.get(global.slug);
     },
     async updateGlobal(global: GlobalSchema, data) {
-      const updated = { ...globalTable.get(global.slug), ...data };
-      globalTable.set(global.slug, updated);
+      const updated = { ...state.globals.get(global.slug), ...data };
+      state.globals.set(global.slug, updated);
       return updated;
     },
   };

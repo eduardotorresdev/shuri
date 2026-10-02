@@ -44,6 +44,13 @@ src/
   `delete` is a no-op for an unknown id. Globals all live in one collection (`globalsCollection`),
   one document per slug with `_id = slug`; `updateGlobal` upserts with `$set`.
 
+## Migrations
+
+None, on purpose. The adapter exposes no `migrations` driver and does not depend on `@shuri/migrate`: MongoDB is
+schemaless, so adding or dropping fields needs no migration, and renames and type changes are handled manually
+for now (a driver was built and then removed; see `docs/plans/migrate.md`, sections 11.2 and 18). Migrations
+are optional per adapter, so this is a valid adapter.
+
 ## Testing
 
 `query.test.ts` needs no database. `test/mongo-adapter.test.ts` needs a real `mongod`: it uses

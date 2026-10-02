@@ -1,82 +1,26 @@
 import { createServer } from "node:http";
-import { apiKey } from "@better-auth/api-key";
-import { betterAuthPlugin } from "@shuri/better-auth";
 import { createClient } from "@shuri/client";
-import { create } from "@shuri/sdk";
+import { migrateUp, parseBundle } from "@shuri/migrate";
+import { create, resolveSchema } from "@shuri/sdk";
 import { toNodeListener } from "@shuri/sdk/node";
-import { createMemoryAdapter } from "@shuri/store-memory";
-import { createAdminHandler } from "@shuri/ui";
-import { collections } from "./collections.ts";
-import { globals } from "./globals.ts";
+import migrations from "../migrations/index.ts";
+import { appConfig, ba, port, setupToken } from "./app-config.ts";
 import { runAuthWalkthrough, type DemoClient } from "./auth-walkthrough.ts";
-
-const port = Number(process.env["PORT"] ?? 3000);
 
 // The credentials the seeded administrator signs in with. Hard-coded because this demo throws its
 // whole store away on exit; a real app would never carry a password in source.
 const ADMIN_EMAIL = "admin@example.com";
 const ADMIN_PASSWORD = "correct horse battery staple";
 
-// `SHURI_SETUP_TOKEN` gates the first-run form — set it and the form asks for it too. The demo seeds
-// an administrator below, so the form only appears if that seed is removed.
-const setupToken = process.env["SHURI_SETUP_TOKEN"];
-
-const ba = betterAuthPlugin({
-  options: {
-    baseURL: `http://localhost:${port}`,
-    // Hard-coded because this demo throws its whole store away on exit.
-    secret: "demo-secret-at-least-32-characters-long",
-    emailAndPassword: { enabled: true },
-    // Declared to better-auth, not only stamped on the row: better-auth parses a user against its
-    // own schema on the way out, so a column it does not know about never reaches a session — and
-    // `authorize` below would never see it. Declaring it here also puts it on the collection
-    // `betterAuthCollections` derives.
-    user: {
-      additionalFields: { role: { type: "string", required: false, input: false } },
-    },
-    // Plain HTTP: a Secure cookie is never stored by a browser talking to http://localhost.
-    advanced: { useSecureCookies: false },
-    // Machine-to-machine: a request carrying a key (`x-api-key`, or a bearer) acts as a `client`
-    // principal with exactly the scopes the key's permissions name — see the seed below.
-    plugins: [apiKey()],
-  },
-  // Whoever completes setup becomes the administrator; `authorize` reads exactly this back.
-  setup: { fields: { role: "admin" } },
+// Creates the schema in the (in-memory) store before anything is written. A production deployment
+// would run `shuri-migrate up` as a deploy step and call `assertMigrated` here instead.
+await migrateUp({
+  files: parseBundle(migrations),
+  driver: appConfig.adapter.migrations,
+  schema: resolveSchema(appConfig),
 });
 
-// `authorize` is what makes the admin an admin. Signup is open, so without it every visitor who
-// registers would be an editor. Reads stay public (`@shuri/ui`'s default) and writes to
-// `/collections` and `/globals` take that session.
-const app = create({
-  collections,
-  globals,
-  adapter: createMemoryAdapter(),
-  plugins: [
-    ba,
-    {
-      name: "admin",
-      handlers: () => [
-        createAdminHandler(
-          { collections, globals },
-          {
-            auth: {
-              auth: ba.sessionSource,
-              basePath: ba.basePath,
-              authorize: (session) => session.user["role"] === "admin",
-              // A request holding an API key is not the guard's to refuse: `@shuri/api` judges it
-              // by the key's scopes, and the guard only speaks sessions.
-              exempt: ba.carriesApiKey,
-              setup: {
-                source: ba.setupSource,
-                ...(setupToken ? { token: setupToken } : {}),
-              },
-            },
-          },
-        ),
-      ],
-    },
-  ],
-});
+const app = create(appConfig);
 
 // The PocketBase side of hooks: registered at runtime, typed per slug, run after the ones the
 // schema declares (see collections.ts). Registered before the seed, so booting already exercises it.

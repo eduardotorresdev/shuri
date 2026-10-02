@@ -5,14 +5,19 @@
   "type": "module",
   "scripts": {
     "start": "node --watch src/server.ts",
+    "prestart": "shuri-migrate bundle",
+    "pretypecheck": "shuri-migrate bundle",
     "typecheck": "tsgo --noEmit -p tsconfig.json",
-    "lint": "oxlint"
+    "lint": "oxlint",
+    "migrate": "shuri-migrate",
+    "migrate:check": "shuri-migrate check"
   },
   "dependencies": {
     "@better-auth/api-key": "1.7.3",
     "@shuri/better-auth": "workspace:*",
     "@shuri/client": "workspace:*",
     "@shuri/core": "workspace:*",
+    "@shuri/migrate": "workspace:*",
     "@shuri/sdk": "workspace:*",
     "@shuri/store-memory": "workspace:*",
     "@shuri/ui": "workspace:*"

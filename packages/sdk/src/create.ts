@@ -7,7 +7,6 @@ import {
   type FallingHandler,
 } from "@shuri/api";
 import {
-  createCore,
   type CollectionHook,
   type CollectionHookName,
   type CollectionSchema,
@@ -31,11 +30,11 @@ import {
 } from "@shuri/store";
 import {
   collectPluginAccess,
-  collectPluginCollections,
   collectPluginOpenApi,
   type PluginContext,
   type ShuriPlugin,
 } from "./plugin.js";
+import { resolveCore } from "./schema.js";
 
 export interface CreateConfig<
   T extends readonly CollectionSchema[],
@@ -221,14 +220,8 @@ export function create<
   const G extends readonly GlobalSchema[] = [],
 >(config: CreateConfig<T, G>): ShuriApp<T, G> {
   const plugins = config.plugins ?? [];
-  const pluginCollections = collectPluginCollections(
-    plugins,
-    new Set(config.collections.map((collection) => collection.slug)),
-  );
-  const collections = [...pluginCollections, ...config.collections] as unknown as T;
   const globals = (config.globals ?? []) as G;
-
-  const core = createCore({ collections, globals });
+  const core = resolveCore(config);
   const store = createStore(core, config.adapter);
   const context = {
     store,

@@ -2,6 +2,9 @@
   "name": "shuri",
   "private": true,
   "packageManager": "pnpm@11.9.0",
+  "engines": {
+    "node": ">=22.18"
+  },
   "prettier": "@shuri/config/prettierrc.base.json",
   "scripts": {
     "build": "turbo run build",
@@ -13,6 +16,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "turbo run lint",
+    "migrate:check": "turbo run migrate:check",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test"
   },

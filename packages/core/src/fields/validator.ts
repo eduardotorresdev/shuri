@@ -10,6 +10,7 @@ import {
   unique,
   type Validator,
 } from "@shuri/validate";
+import { fieldNameValidator } from "./slug.js";
 import type {
   Field,
   NumberField,
@@ -77,7 +78,7 @@ function relationFieldValidator(
 export function fieldValidator(slugs: Set<string>): Validator<Field> {
   return all<Field>(
     object<Field>({
-      name: required('"name" is required'),
+      name: fieldNameValidator,
       hidden: optional(boolean('"hidden" must be a boolean')),
       index: optional(boolean('"index" must be a boolean')),
     }),

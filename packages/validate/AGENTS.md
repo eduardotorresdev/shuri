@@ -15,6 +15,10 @@ src/
   errors.ts              ValidationError (issues -> Error), formatIssue/formatIssues
   validators.ts           validate/assertValid + every combinator
   validators.test.ts       unit tests for each combinator
+  collections.ts            arrayOf (with min) and record (with key validator): untrusted-shape collections
+  collections.test.ts        unit tests for arrayOf/record
+  discriminated.ts            tagged-union combinator
+  discriminated.test.ts        unit tests for discriminated
   primitives.ts             type and length/pattern primitives (string, number, boolean, func, minLength, maxLength, matches)
   primitives.test.ts         unit tests for each primitive
 ```
@@ -29,9 +33,19 @@ src/
   original `issues` and formats a readable message.
 - **validators.ts** — two runners (`validate` collects issues, `assertValid` throws) and the
   combinators:
-  - primitives: `required`, `refine`, `optional`, `oneOf`, `all`
-  - structural: `object` (fixed fields), `array`/`arrayOf` (by index), `record` (arbitrary keys),
-    `keyedArray`/`unique` (dedupe by derived key), `nonEmpty`
+  - primitives: `required`, `refine`, `optional`, `nullable` (accepts `null`, else delegates), `oneOf`, `all`
+  - structural: `object`/`objectOf` (fixed fields), `array` (by index), `keyedArray`/`unique` (dedupe
+    by derived key), `nonEmpty`
+- **collections.ts** — the untrusted-shape collection combinators, split out of `validators.ts` to
+  keep it under the 300-line ceiling: `arrayOf(item, message?, { min, minMessage })` (the array type
+  check, then the minimum length at the array's own path, then each item) and
+  `record(value, message?, { key })` (each entry's key is validated by `key` at `ctx.at(key)`, the
+  same path its value is validated at).
+- **discriminated.ts** — `discriminated(tag, variants, message?)` validates a tagged union: a
+  non-object is reported at the current path (`must be an object`), an unknown or missing tag at the
+  tag's own path (default `must be one of a, b`; inherited keys such as `toString` don't count), and
+  otherwise the matching variant runs with the _same_ context, so its issue paths are unchanged.
+  Added for `@shuri/migrate`'s op and field-spec validators.
 - **primitives.ts** — the type guards (`string`, `number` — which also rejects `NaN` —, `boolean`,
   `func`) and
   the string checks (`minLength`, `maxLength`, `matches`), all over `unknown`. They live in their own

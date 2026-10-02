@@ -99,7 +99,9 @@ where)` (strict `===` for `eq`/`ne`, `compareValues` for the ranges) and `mergeW
 
 ## Role in the monorepo
 
-`@shuri/store-memory` (in-memory) and `@shuri/store-mongo` (MongoDB) implement `StoreAdapter`.
+`@shuri/store-memory` (in-memory) and `@shuri/store-mongo` (MongoDB) implement `StoreAdapter`. Migrations are
+optional per adapter: an adapter may also expose `migrations` (`Migratable` of `@shuri/migrate`; only
+`store-memory` does), and one without it is just as valid.
 `@shuri/api` depends solely on this package to stay framework-agnostic, using
 `CollectionStore`/`GlobalStore` as the only types it needs, and feeds its `/events` stream from
 wildcard `afterChange`/`afterDelete` hooks on `store.hooks`. `@shuri/sdk` is the one that actually

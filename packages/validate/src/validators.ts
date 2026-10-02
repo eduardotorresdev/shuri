@@ -51,6 +51,18 @@ export function optional<T>(validator: Validator<T>): Validator<T | undefined> {
 }
 
 /**
+ * Accepts `null` and otherwise delegates to `validator`, for properties that are explicitly nullable
+ * (as opposed to `optional`, which accepts `undefined`).
+ * @param validator - The validator to run once the value is not `null`.
+ * @returns A validator that skips `validator` for `null` values.
+ */
+export function nullable<T>(validator: Validator<T>): Validator<T | null> {
+  return (value, ctx) => {
+    if (value !== null) validator(value, ctx);
+  };
+}
+
+/**
  * Reports an issue when the value isn't one of `allowed` (by `===`).
  * @param allowed - The set of values the input must be one of.
  * @param [message] - The issue message, or a function producing one from the value.
@@ -93,50 +105,6 @@ export function object<T extends object>(fields: {
     for (const key of Object.keys(fields) as (keyof T)[]) {
       const fieldValidator = fields[key];
       if (fieldValidator) fieldValidator(value[key], ctx.at(String(key)));
-    }
-  };
-}
-
-/**
- * Validates a value of unknown shape (untrusted input: parsed JSON, a query param, ...) as an array,
- * like `array` validates a value already known to be one. Reports `message` and skips item
- * validation if it isn't.
- * @param itemValidator - The validator run against each item, once the value is confirmed to be an array.
- * @param [message] - The issue message reported when the value isn't an array.
- * @returns A validator that fails when the value isn't an array, else delegates to `array`.
- */
-export function arrayOf<T>(
-  itemValidator: Validator<T>,
-  message = "must be an array",
-): Validator<unknown> {
-  return (value, ctx) => {
-    if (!Array.isArray(value)) {
-      ctx.addIssue(message);
-      return;
-    }
-    array(itemValidator)(value, ctx);
-  };
-}
-
-/**
- * Validates every value of a plain object keyed by arbitrary strings (a dictionary/map), like
- * `object` validates a fixed, known set of keys. For a value of unknown shape (untrusted input),
- * reports `message` and skips item validation if it isn't a plain object.
- * @param valueValidator - The validator run against each value of the object.
- * @param [message] - The issue message reported when the value isn't a plain object.
- * @returns A validator that fails when the value isn't a plain object, else validates each entry.
- */
-export function record<T>(
-  valueValidator: Validator<T>,
-  message = "must be an object",
-): Validator<unknown> {
-  return (value, ctx) => {
-    if (typeof value !== "object" || value === null || Array.isArray(value)) {
-      ctx.addIssue(message);
-      return;
-    }
-    for (const [key, item] of Object.entries(value)) {
-      valueValidator(item as T, ctx.at(key));
     }
   };
 }
